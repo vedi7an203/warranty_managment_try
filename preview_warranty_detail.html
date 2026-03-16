@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WAR-2024-001842 — WAM</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Font Awesome 6 -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+
+  <style>
+    /* ══ Root / Variables ══ */
+    :root {
+      --wam-navy:       #0a1628;
+      --wam-blue:       #0d3b6e;
+      --wam-mid:        #1a6bb5;
+      --wam-accent:     #e8680a;
+      --wam-bg:         #f0f4f8;
+      --wam-card:       #ffffff;
+      --wam-border:     #dde3ea;
+      --wam-text:       #1c2b3a;
+      --wam-muted:      #6b7a8d;
+      --status-open:    #0d6efd;
+      --status-ws:      #fd7e14;
+      --status-eng:     #6f42c1;
+      --status-closed:  #6c757d;
+      --decision-acc:   #198754;
+      --decision-part:  #ffc107;
+      --decision-rej:   #dc3545;
+    }
+    body.wam-body {
+      background: var(--wam-bg);
+      color: var(--wam-text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 0.9rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main { flex: 1; }
+
+    /* ── Topbar ── */
+    .wam-navbar {
+      background: var(--wam-navy);
+      border-bottom: 3px solid var(--wam-accent);
+      padding: 0.4rem 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .wam-navbar .navbar-toggler-icon { filter: invert(1); }
+    .brand-icon { color: var(--wam-accent); font-size: 1.4rem; }
+    .brand-title { font-size: 1.3rem; font-weight: 800; color: #fff; letter-spacing: 1px; }
+    .brand-sub { display: block; font-size: 0.65rem; color: rgba(255,255,255,0.55); letter-spacing: 0.5px; margin-top: -2px; }
+    .brand-text { line-height: 1.1; }
+    .wam-navbar .nav-link { color: rgba(255,255,255,0.75) !important; font-weight: 500; font-size: 0.875rem; padding: 0.5rem 0.85rem !important; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .wam-navbar .nav-link:hover, .wam-navbar .nav-link.active { color: #fff !important; background: rgba(255,255,255,0.12); }
+    .user-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 0.85rem; }
+    .user-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+    /* ── Footer ── */
+    .wam-footer { background: var(--wam-navy); color: rgba(255,255,255,0.4); text-align: center; padding: 0.5rem; font-size: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); }
+
+    /* ── Avatars ── */
+    .avatar-sm { width: 32px; height: 32px; background: linear-gradient(135deg, var(--wam-mid), var(--wam-blue)); color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+    .avatar-xs { width: 24px; height: 24px; background: linear-gradient(135deg, var(--wam-mid), var(--wam-blue)); color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; flex-shrink: 0; }
+
+    /* ── Status Hero ── */
+    .status-hero { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 10px; background: color-mix(in srgb, var(--status-color) 10%, white); border: 2px solid var(--status-color); }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--status-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-color) 25%, white); animation: pulse-dot 2s infinite; }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-color) 25%, white); }
+      50%       { box-shadow: 0 0 0 6px color-mix(in srgb, var(--status-color) 10%, white); }
+    }
+    .status-main { font-weight: 700; font-size: 0.9rem; color: var(--status-color); }
+    .status-sub { font-size: 0.72rem; color: var(--wam-muted); }
+
+    /* ── Info Cards ── */
+    .info-card { border: 1px solid var(--wam-border); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .info-header { background: #f8fafc; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--wam-muted); padding: 0.5rem 0.85rem; border-bottom: 1px solid var(--wam-border); }
+    .info-dl dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--wam-muted); margin-bottom: 1px; margin-top: 8px; }
+    .info-dl dd { margin-bottom: 0; font-size: 0.88rem; }
+    .info-dl dt:first-child { margin-top: 0; }
+
+    /* ── Time Metrics ── */
+    .time-metric { display: flex; align-items: center; gap: 10px; }
+    .time-label { width: 36px; height: 36px; border-radius: 8px; background: rgba(25,135,84,0.1); color: var(--decision-acc); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 800; flex-shrink: 0; }
+    .time-value { font-size: 1.05rem; font-weight: 700; line-height: 1; }
+    .time-sub { font-size: 0.68rem; color: var(--wam-muted); }
+
+    /* ── Activity Timeline ── */
+    .timeline { position: relative; }
+    .timeline::before { content: ''; position: absolute; left: 14px; top: 0; bottom: 0; width: 2px; background: var(--wam-border); }
+    .timeline-item { display: flex; gap: 12px; padding: 8px 0; position: relative; }
+    .timeline-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; position: relative; z-index: 1; box-shadow: 0 0 0 3px #fff; }
+    .timeline-content { flex: 1; min-width: 0; padding-top: 2px; }
+    .timeline-comment { background: #f8fafc; border-left: 3px solid var(--wam-border); padding: 4px 8px; border-radius: 0 4px 4px 0; white-space: pre-line; word-break: break-word; }
+
+    /* ── Previous Warranty Items ── */
+    .prev-warranty-item { display: block; padding: 8px 10px; border-radius: 6px; background: #f8fafc; border: 1px solid var(--wam-border); transition: background 0.1s; color: var(--wam-text) !important; }
+    .prev-warranty-item:hover { background: #e8f0fe; }
+
+    /* ── Status Option ── */
+    .status-option { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--wam-border); transition: background 0.1s; }
+    .status-option:hover { background: #f8fafc; }
+    .status-option.active { background: #eef4ff; border-color: var(--wam-mid); }
+
+    /* ── Utility ── */
+    .btn-xs { font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px; }
+    .bg-purple { background-color: #6f42c1 !important; }
+    .tiny { font-size: 0.68rem; }
+
+    @media (max-width: 768px) {
+      .kpi-value { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body class="wam-body">
+
+<!-- ═══════════════ TOPBAR ═══════════════ -->
+<nav class="navbar navbar-expand-lg wam-navbar">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+      <span class="brand-icon"><i class="fa-solid fa-jet-fighter-up"></i></span>
+      <span class="brand-text">
+        <span class="brand-title">WAM</span>
+        <span class="brand-sub">Warranty Adjudication</span>
+      </span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-4">
+        <li class="nav-item">
+          <a class="nav-link" href="#"><i class="fa-solid fa-list-check me-1"></i>Dashboard</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#"><i class="fa-solid fa-plus-circle me-1"></i>New Warranty</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#"><i class="fa-solid fa-chart-bar me-1"></i>Statistics</a>
+        </li>
+      </ul>
+      <div class="dropdown">
+        <button class="btn btn-sm user-btn dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown">
+          <span class="avatar-sm">JD</span>
+          <span class="d-none d-md-inline">Jean Dupont</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><span class="dropdown-item-text small text-muted">Engineer</span></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-danger" href="#"><i class="fa-solid fa-right-from-bracket me-1"></i>Logout</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<main class="container-fluid px-4 py-3">
+
+  <!-- BREADCRUMB + HEADER -->
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1 small">
+          <li class="breadcrumb-item"><a href="#">Dashboard</a></li>
+          <li class="breadcrumb-item active">WAR-2024-001842</li>
+        </ol>
+      </nav>
+      <h3 class="mb-1 fw-bold">
+        <span class="font-monospace">WAR-2024-001842</span>
+        <span class="badge bg-warning text-dark ms-2 small align-middle"
+              title="This unit has 2 previous warranty case(s)">
+          <i class="fa-solid fa-rotate-left"></i> 2 prev.
+        </span>
+      </h3>
+      <p class="text-muted mb-0 small">
+        ADIRU — Air Data Inertial Reference Unit
+        &nbsp;&bull;&nbsp; Air France
+        &nbsp;&bull;&nbsp; Created 12 Jan 2024 14:32 by Marie Lambert
+      </p>
+    </div>
+
+    <!-- Status badge -->
+    <div class="text-end">
+      <div class="status-hero" style="--status-color: #fd7e14">
+        <div class="status-dot"></div>
+        <div>
+          <div class="status-main">Under Workshop Investigation</div>
+          <div class="status-sub">Since 15 Jan 2024</div>
+        </div>
+      </div>
+      <div class="mt-2 d-flex gap-2 justify-content-end">
+        <a href="#" class="btn btn-sm btn-outline-secondary">
+          <i class="fa-solid fa-pen me-1"></i>Edit
+        </a>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#statusModal">
+          <i class="fa-solid fa-exchange-alt me-1"></i>Change Status
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- ════════ LEFT COLUMN ════════ -->
+    <div class="col-12 col-xl-8">
+
+      <!-- Row 1: Part + MCO -->
+      <div class="row g-3 mb-3">
+        <!-- Part Info -->
+        <div class="col-md-6">
+          <div class="card info-card h-100">
+            <div class="card-header info-header">
+              <i class="fa-solid fa-microchip me-2 text-primary"></i>LRU / Part
+            </div>
+            <div class="card-body">
+              <dl class="info-dl mb-0">
+                <dt>Part Number</dt>
+                <dd class="font-monospace fw-bold">4076200-903</dd>
+                <dt>Serial Number</dt>
+                <dd class="font-monospace">SN-7841-AF</dd>
+                <dt>Description</dt>
+                <dd>Air Data Inertial Reference Unit</dd>
+                <dt>ATA Chapter</dt>
+                <dd>34-10</dd>
+                <dt>Customer</dt>
+                <dd>Air France <span class="text-muted small">(AFR)</span></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <!-- MCO / Dates -->
+        <div class="col-md-6">
+          <div class="card info-card h-100">
+            <div class="card-header info-header">
+              <i class="fa-solid fa-clipboard-list me-2 text-info"></i>MCO &amp; Dates
+            </div>
+            <div class="card-body">
+              <dl class="info-dl mb-0">
+                <dt>Current MCO</dt>
+                <dd class="font-monospace fw-bold text-primary">MCO-2024-00312</dd>
+                <dt>Former MCO</dt>
+                <dd class="font-monospace">MCO-2022-00189</dd>
+                <dt>Former ARC Date</dt>
+                <dd>08 Nov 2022</dd>
+                <dt>Adjudication Start</dt>
+                <dd>15 Jan 2024</dd>
+                <dt>Date of Defect</dt>
+                <dd>10 Jan 2024</dd>
+                <dt>Installation Date</dt>
+                <dd>22 Mar 2023</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Defect + Time Params -->
+      <div class="row g-3 mb-3">
+        <!-- Defect -->
+        <div class="col-md-8">
+          <div class="card info-card h-100">
+            <div class="card-header info-header">
+              <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Defect Details
+            </div>
+            <div class="card-body">
+              <p class="small fw-semibold text-muted mb-1">Observed Defect</p>
+              <p class="mb-3">ADIRU flagged ATT/HDG DISAGREE fault on ECAM during cruise phase at FL350. IRS2 declared invalid by FMGC. Multiple resets attempted without success. Unit removed IAW AMM 34-10-00.</p>
+              <p class="small fw-semibold text-muted mb-1">Reason for Removal</p>
+              <p class="mb-0">Persistent ATT/HDG mismatch exceeding ±2° threshold across all three IRS channels. In-flight shutdown triggered per QRH procedure. Considered NFF pending shop inspection.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Time Params -->
+        <div class="col-md-4">
+          <div class="card info-card h-100">
+            <div class="card-header info-header">
+              <i class="fa-solid fa-clock-rotate-left me-2 text-success"></i>Time Params
+            </div>
+            <div class="card-body">
+              <div class="time-metric mb-3">
+                <div class="time-label">TSI</div>
+                <div>
+                  <div class="time-value">2 847 h</div>
+                  <div class="time-sub">Time Since Installation</div>
+                </div>
+              </div>
+              <div class="time-metric mb-3">
+                <div class="time-label">TSO</div>
+                <div>
+                  <div class="time-value">8 204 h</div>
+                  <div class="time-sub">Time Since Overhaul</div>
+                </div>
+              </div>
+              <div class="time-metric">
+                <div class="time-label">FC</div>
+                <div>
+                  <div class="time-value">1 423</div>
+                  <div class="time-sub">Flight Cycles</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Timeline -->
+      <div class="card info-card mb-3">
+        <div class="card-header info-header d-flex justify-content-between align-items-center">
+          <span><i class="fa-solid fa-timeline me-2 text-secondary"></i>Activity Log</span>
+          <span class="badge bg-secondary">4 events</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="timeline px-3 py-2">
+
+            <!-- Event 1 -->
+            <div class="timeline-item">
+              <div class="timeline-dot bg-primary">
+                <i class="fa-solid fa-plus fa-xs"></i>
+              </div>
+              <div class="timeline-content">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <span class="fw-semibold small">Marie Lambert</span>
+                    <span class="badge bg-primary ms-1 small">Created</span>
+                  </div>
+                  <span class="text-muted small ms-2 text-nowrap">12 Jan 2024 14:32</span>
+                </div>
+                <p class="mb-0 mt-1 small text-muted timeline-comment">Warranty case opened following ADIRU removal from F-GSQI. Shop order MCO-2024-00312 raised.</p>
+              </div>
+            </div>
+
+            <!-- Event 2 -->
+            <div class="timeline-item">
+              <div class="timeline-dot bg-warning">
+                <i class="fa-solid fa-wrench fa-xs"></i>
+              </div>
+              <div class="timeline-content">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <span class="fw-semibold small">Pierre Martin</span>
+                    <span class="badge bg-warning ms-1 small">Status Change</span>
+                    <span class="text-muted small ms-1">
+                      <span class="badge bg-light text-dark border">Open</span>
+                      <i class="fa-solid fa-arrow-right mx-1 tiny"></i>
+                      <span class="badge bg-light text-dark border">Under Workshop Investigation</span>
+                    </span>
+                  </div>
+                  <span class="text-muted small ms-2 text-nowrap">15 Jan 2024 09:10</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event 3 -->
+            <div class="timeline-item">
+              <div class="timeline-dot bg-info">
+                <i class="fa-solid fa-comment fa-xs"></i>
+              </div>
+              <div class="timeline-content">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <span class="fw-semibold small">Sophie Renard</span>
+                    <span class="badge bg-info ms-1 small">Comment</span>
+                  </div>
+                  <span class="text-muted small ms-2 text-nowrap">17 Jan 2024 11:45</span>
+                </div>
+                <p class="mb-0 mt-1 small text-muted timeline-comment">Initial bench test confirms ATT output drift. Alignment sequence initiated. Awaiting gyro-block diagnostic results before escalating to Engineering.</p>
+              </div>
+            </div>
+
+            <!-- Event 4 -->
+            <div class="timeline-item">
+              <div class="timeline-dot bg-secondary">
+                <i class="fa-solid fa-user-plus fa-xs"></i>
+              </div>
+              <div class="timeline-content">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <span class="fw-semibold small">Marie Lambert</span>
+                    <span class="badge bg-secondary ms-1 small">Engineer Assigned</span>
+                  </div>
+                  <span class="text-muted small ms-2 text-nowrap">18 Jan 2024 08:22</span>
+                </div>
+                <p class="mb-0 mt-1 small text-muted timeline-comment">Pierre Martin assigned as lead engineer. Sophie Renard added as support.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Add Comment -->
+          <div class="px-3 pb-3 pt-1 border-top">
+            <form onsubmit="return false;">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text">
+                  <i class="fa-solid fa-comment-dots text-info"></i>
+                </span>
+                <input type="text" name="comment" class="form-control"
+                       placeholder="Add a comment or investigation note…" required/>
+                <button type="submit" class="btn btn-info text-white btn-sm">Add Note</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ════════ RIGHT COLUMN ════════ -->
+    <div class="col-12 col-xl-4">
+
+      <!-- Assigned Engineers -->
+      <div class="card info-card mb-3">
+        <div class="card-header info-header d-flex justify-content-between align-items-center">
+          <span><i class="fa-solid fa-users-gear me-2 text-primary"></i>Assigned Engineers</span>
+          <button class="btn btn-xs btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#addEngPanel">
+            <i class="fa-solid fa-user-plus"></i>
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="d-flex flex-column gap-2 mb-2">
+            <!-- Engineer 1 -->
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar-sm">PM</span>
+                <div>
+                  <div class="small fw-semibold">Pierre Martin</div>
+                  <div class="tiny text-muted">p.martin@mro-aero.com</div>
+                </div>
+              </div>
+              <form onsubmit="return false;">
+                <button type="submit" class="btn btn-xs btn-outline-danger" title="Remove engineer">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </form>
+            </div>
+            <!-- Engineer 2 -->
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar-sm">SR</span>
+                <div>
+                  <div class="small fw-semibold">Sophie Renard</div>
+                  <div class="tiny text-muted">s.renard@mro-aero.com</div>
+                </div>
+              </div>
+              <form onsubmit="return false;">
+                <button type="submit" class="btn btn-xs btn-outline-danger" title="Remove engineer">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Add engineer panel (collapsed) -->
+          <div class="collapse" id="addEngPanel">
+            <hr class="my-2">
+            <p class="small fw-semibold mb-2">Assign engineer:</p>
+            <form onsubmit="return false;" class="mb-1">
+              <button type="submit" class="btn btn-sm btn-outline-success w-100 text-start">
+                <span class="avatar-xs me-1">LB</span>
+                Lucas Bernard
+              </button>
+            </form>
+            <form onsubmit="return false;" class="mb-1">
+              <button type="submit" class="btn btn-sm btn-outline-success w-100 text-start">
+                <span class="avatar-xs me-1">AC</span>
+                Amélie Chevalier
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Previous Warranty History -->
+      <div class="card info-card mb-3">
+        <div class="card-header info-header d-flex align-items-center gap-2">
+          <i class="fa-solid fa-rotate-left text-warning"></i>
+          Previous Warranty History
+          <span class="badge bg-warning text-dark ms-auto">2</span>
+        </div>
+        <div class="card-body">
+          <p class="small text-muted mb-2">
+            Unit <strong>SN-7841-AF</strong> has been under
+            warranty <strong>2</strong> previous times.
+          </p>
+          <div class="d-flex flex-column gap-2">
+            <!-- Previous warranty 1 -->
+            <a href="#" class="prev-warranty-item text-decoration-none">
+              <div class="d-flex justify-content-between align-items-start">
+                <span class="font-monospace small fw-bold">WAR-2022-000741</span>
+                <span class="badge bg-secondary small">Closed</span>
+              </div>
+              <div class="text-muted tiny mt-1">14 Sep 2022 &bull; Air France</div>
+              <div class="text-muted tiny">IRS3 HDG flag on ECAM, NFF confirmed after bench…</div>
+            </a>
+            <!-- Previous warranty 2 -->
+            <a href="#" class="prev-warranty-item text-decoration-none">
+              <div class="d-flex justify-content-between align-items-start">
+                <span class="font-monospace small fw-bold">WAR-2020-000318</span>
+                <span class="badge bg-secondary small">Closed</span>
+              </div>
+              <div class="text-muted tiny mt-1">03 Apr 2020 &bull; Air France</div>
+              <div class="text-muted tiny">ATT DISAGREE fault triggered during initial climb, u…</div>
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /row -->
+
+</main>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="wam-footer">
+  <span class="text-muted small">
+    &copy; 2024 Warranty Adjudication Management &mdash; Aerospace Part 145 MRO
+  </span>
+</footer>
+
+<!-- ════════════════════ STATUS CHANGE MODAL ════════════════════ -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form onsubmit="return false;" id="statusForm">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fa-solid fa-exchange-alt me-2"></i>Change Warranty Status
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">
+            Current status:
+            <span class="badge" style="background:#fd7e14">Under Workshop Investigation</span>
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">New Status</label>
+            <div class="d-flex flex-column gap-2">
+              <div class="form-check status-option">
+                <input class="form-check-input" type="radio" name="status" value="open" id="s_open" onchange="toggleClosurePanel()">
+                <label class="form-check-label" for="s_open">
+                  <span class="badge" style="background:#0d6efd">Open</span>
+                </label>
+              </div>
+              <div class="form-check status-option active">
+                <input class="form-check-input" type="radio" name="status" value="workshop" id="s_workshop" checked onchange="toggleClosurePanel()">
+                <label class="form-check-label" for="s_workshop">
+                  <span class="badge" style="background:#fd7e14">Under Workshop Investigation</span>
+                </label>
+              </div>
+              <div class="form-check status-option">
+                <input class="form-check-input" type="radio" name="status" value="engineering" id="s_engineering" onchange="toggleClosurePanel()">
+                <label class="form-check-label" for="s_engineering">
+                  <span class="badge" style="background:#6f42c1">Under Engineering Review</span>
+                </label>
+              </div>
+              <div class="form-check status-option">
+                <input class="form-check-input" type="radio" name="status" value="closed" id="s_closed" onchange="toggleClosurePanel()">
+                <label class="form-check-label" for="s_closed">
+                  <span class="badge" style="background:#6c757d">Closed</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Closure Decision (visible only when Closed selected) -->
+          <div id="closurePanel" class="collapse">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Closure Decision <span class="text-danger">*</span></label>
+              <div class="d-flex flex-column gap-2">
+                <div class="form-check status-option">
+                  <input class="form-check-input" type="radio" name="closure_decision" value="accepted" id="d_accepted">
+                  <label class="form-check-label" for="d_accepted">
+                    <span class="badge" style="background:#198754">Accepted</span>
+                  </label>
+                </div>
+                <div class="form-check status-option">
+                  <input class="form-check-input" type="radio" name="closure_decision" value="partial" id="d_partial">
+                  <label class="form-check-label" for="d_partial">
+                    <span class="badge" style="background:#ffc107; color:#000">Partially Accepted</span>
+                  </label>
+                </div>
+                <div class="form-check status-option">
+                  <input class="form-check-input" type="radio" name="closure_decision" value="rejected" id="d_rejected">
+                  <label class="form-check-label" for="d_rejected">
+                    <span class="badge" style="background:#dc3545">Rejected</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Comment</label>
+            <textarea name="comment" class="form-control" rows="3"
+                      placeholder="Add context for this status change…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check me-1"></i>Update Status
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function toggleClosurePanel() {
+  const val = document.querySelector('input[name="status"]:checked')?.value;
+  const panel = document.getElementById('closurePanel');
+  if (val === 'closed') {
+    panel.classList.add('show');
+  } else {
+    panel.classList.remove('show');
+  }
+}
+
+document.getElementById('statusForm').addEventListener('submit', function(e) {
+  const status = document.querySelector('input[name="status"]:checked')?.value;
+  if (status === 'closed') {
+    const decision = document.querySelector('input[name="closure_decision"]:checked');
+    if (!decision) {
+      e.preventDefault();
+      alert('Please select a closure decision before closing the warranty.');
+    }
+  }
+});
+</script>
+</body>
+</html>
