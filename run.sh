@@ -10,8 +10,18 @@ echo "  WAM — Warranty Adjudication Management"
 echo "  Aerospace Part 145 MRO"
 echo "══════════════════════════════════════════════"
 
-echo "[*] Installing Python dependencies…"
-pip install -r requirements.txt -q
+# Install dependencies (non-fatal — handles offline / proxy-restricted environments)
+if ! python3 -c "import flask, flask_sqlalchemy, flask_login, werkzeug" 2>/dev/null; then
+  echo "[*] Installing Python dependencies…"
+  pip install -r requirements.txt -q || true
+  if ! python3 -c "import flask, flask_sqlalchemy, flask_login, werkzeug" 2>/dev/null; then
+    echo "[!] Error: required packages could not be installed."
+    echo "    Run manually: pip install -r requirements.txt"
+    exit 1
+  fi
+else
+  echo "[*] Python dependencies already satisfied."
+fi
 
 export FLASK_APP=app.py
 export FLASK_DEBUG=1
