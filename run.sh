@@ -10,11 +10,8 @@ echo "  WAM — Warranty Adjudication Management"
 echo "  Aerospace Part 145 MRO"
 echo "══════════════════════════════════════════════"
 
-# Install dependencies if needed
-if ! python3 -c "import flask" 2>/dev/null; then
-  echo "[*] Installing Python dependencies…"
-  pip install -r requirements.txt
-fi
+echo "[*] Installing Python dependencies…"
+pip install -r requirements.txt -q
 
 export FLASK_APP=app.py
 export FLASK_DEBUG=1
