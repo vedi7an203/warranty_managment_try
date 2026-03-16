@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Statistics — WAM{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="fw-bold mb-0">
+    <i class="fa-solid fa-chart-bar text-primary me-2"></i>Warranty Statistics &amp; Analytics
+  </h4>
+</div>
+
+<!-- ────────────────────────  FILTER BAR  ──────────────────────── -->
+<div class="card filter-card mb-4">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-auto">
+        <span class="filter-label d-block"><i class="fa-solid fa-filter me-1"></i>Filters</span>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="filter-label">Customer</label>
+        <select id="f_customer" class="form-select form-select-sm">
+          <option value="">All customers</option>
+          {% for c in customers %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="filter-label">Engineer</label>
+        <select id="f_engineer" class="form-select form-select-sm">
+          <option value="">All engineers</option>
+          {% for e in engineers %}
+          <option value="{{ e.id }}">{{ e.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="filter-label">Part Number</label>
+        <select id="f_part" class="form-select form-select-sm">
+          <option value="">All P/Ns</option>
+          {% for pn in part_numbers %}
+          <option value="{{ pn }}">{{ pn }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button onclick="loadStats()" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-refresh me-1"></i>Refresh
+        </button>
+        <button onclick="clearFilters()" class="btn btn-outline-secondary btn-sm">
+          <i class="fa-solid fa-xmark me-1"></i>Clear
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────────────  KPI ROW  ──────────────────────── -->
+<div class="row g-3 mb-4" id="kpiRow">
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card kpi-total h-100">
+      <div class="card-body text-center py-3">
+        <div class="kpi-value" id="kpi_total">—</div>
+        <div class="kpi-label">Total Warranties</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card kpi-open h-100">
+      <div class="card-body text-center py-3">
+        <div class="kpi-value" id="kpi_open">—</div>
+        <div class="kpi-label">Active Cases</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card kpi-closed h-100">
+      <div class="card-body text-center py-3">
+        <div class="kpi-value" id="kpi_closed">—</div>
+        <div class="kpi-label">Closed Cases</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card kpi-engineering h-100">
+      <div class="card-body text-center py-3">
+        <div class="kpi-value" id="kpi_acc">—%</div>
+        <div class="kpi-label">Acceptance Rate</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────────────  CHARTS  ──────────────────────── -->
+
+<!-- Row 1: Monthly trend (full width) -->
+<div class="card chart-card mb-4">
+  <div class="card-header chart-header">
+    <i class="fa-solid fa-chart-line me-2 text-primary"></i>
+    Warranty Requests — Monthly Trend (last 18 months)
+  </div>
+  <div class="card-body">
+    <canvas id="monthlyChart" height="80"></canvas>
+  </div>
+</div>
+
+<!-- Row 2: Status + Decisions -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card chart-card h-100">
+      <div class="card-header chart-header">
+        <i class="fa-solid fa-chart-pie me-2 text-info"></i>Distribution by Status
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <canvas id="statusChart" style="max-height:280px; max-width:280px;"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card chart-card h-100">
+      <div class="card-header chart-header">
+        <i class="fa-solid fa-chart-pie me-2 text-success"></i>Closure Decisions
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <canvas id="decisionChart" style="max-height:280px; max-width:280px;"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Row 3: Top Parts + By Customer -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card chart-card h-100">
+      <div class="card-header chart-header">
+        <i class="fa-solid fa-microchip me-2 text-warning"></i>Top 10 — By Part Number
+      </div>
+      <div class="card-body">
+        <canvas id="partsChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card chart-card h-100">
+      <div class="card-header chart-header">
+        <i class="fa-solid fa-plane me-2 text-danger"></i>Warranties by Customer
+      </div>
+      <div class="card-body">
+        <canvas id="customerChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Row 4: By Engineer -->
+<div class="card chart-card mb-4">
+  <div class="card-header chart-header">
+    <i class="fa-solid fa-users-gear me-2 text-secondary"></i>Engineer Workload
+  </div>
+  <div class="card-body">
+    <canvas id="engineerChart" height="60"></canvas>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PALETTE = [
+  '#0d6efd','#fd7e14','#6f42c1','#198754','#dc3545',
+  '#ffc107','#0dcaf0','#6c757d','#20c997','#d63384',
+];
+
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function makeBar(id, labels, data, colors, horizontal=false) {
+  destroyChart(id);
+  const ctx = document.getElementById(id);
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors || PALETTE,
+                   borderRadius: 4, borderSkipped: false }]
+    },
+    options: {
+      indexAxis: horizontal ? 'y' : 'x',
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: !horizontal } },
+                y: { grid: { display: horizontal } } },
+      responsive: true,
+    }
+  });
+}
+
+function makeDoughnut(id, labels, data, colors) {
+  destroyChart(id);
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors || PALETTE,
+                                  borderWidth: 2, hoverOffset: 6 }] },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+      cutout: '60%',
+      responsive: true,
+    }
+  });
+}
+
+function makeLine(id, labels, data) {
+  destroyChart(id);
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: 'rgba(13,110,253,0.25)',
+        borderColor: '#0d6efd',
+        borderWidth: 2,
+        borderRadius: 4,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      },
+      responsive: true,
+    }
+  });
+}
+
+function loadStats() {
+  const params = new URLSearchParams({
+    customer_id: document.getElementById('f_customer').value,
+    engineer_id: document.getElementById('f_engineer').value,
+    part_number: document.getElementById('f_part').value,
+  });
+
+  fetch('/api/statistics?' + params.toString())
+    .then(r => r.json())
+    .then(d => {
+      // KPIs
+      document.getElementById('kpi_total').textContent = d.kpi.total;
+      document.getElementById('kpi_open').textContent  = d.kpi.open;
+      document.getElementById('kpi_closed').textContent= d.kpi.closed;
+      document.getElementById('kpi_acc').textContent   = d.kpi.acc_rate + '%';
+
+      // Charts
+      makeLine('monthlyChart', d.monthly.labels, d.monthly.data);
+      makeDoughnut('statusChart',   d.by_status.labels,   d.by_status.data,   d.by_status.colors);
+      makeDoughnut('decisionChart', d.by_decision.labels, d.by_decision.data, d.by_decision.colors);
+      makeBar('partsChart',    d.top_parts.labels,   d.top_parts.data,   null, true);
+      makeBar('customerChart', d.by_customer.labels, d.by_customer.data, PALETTE.slice(2));
+      makeBar('engineerChart', d.by_engineer.labels, d.by_engineer.data, PALETTE.slice(4));
+    })
+    .catch(err => console.error('Stats load error:', err));
+}
+
+function clearFilters() {
+  document.getElementById('f_customer').value = '';
+  document.getElementById('f_engineer').value = '';
+  document.getElementById('f_part').value = '';
+  loadStats();
+}
+
+// Auto-load on page ready
+document.addEventListener('DOMContentLoaded', loadStats);
+
+// Auto-reload on filter change
+['f_customer','f_engineer','f_part'].forEach(id => {
+  document.getElementById(id).addEventListener('change', loadStats);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,432 @@
+/* ══════════════════════════════════════════════════════
+   WAM — Warranty Adjudication Management
+   Aerospace Part 145 MRO  |  Custom Stylesheet
+   ══════════════════════════════════════════════════════ */
+
+/* ── Root / Variables ─────────────────────────── */
+:root {
+  --wam-navy:       #0a1628;
+  --wam-blue:       #0d3b6e;
+  --wam-mid:        #1a6bb5;
+  --wam-accent:     #e8680a;
+  --wam-bg:         #f0f4f8;
+  --wam-card:       #ffffff;
+  --wam-border:     #dde3ea;
+  --wam-text:       #1c2b3a;
+  --wam-muted:      #6b7a8d;
+
+  --status-open:    #0d6efd;
+  --status-ws:      #fd7e14;
+  --status-eng:     #6f42c1;
+  --status-closed:  #6c757d;
+  --decision-acc:   #198754;
+  --decision-part:  #ffc107;
+  --decision-rej:   #dc3545;
+}
+
+/* ── Base ─────────────────────────── */
+body.wam-body {
+  background: var(--wam-bg);
+  color: var(--wam-text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 0.9rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+main { flex: 1; }
+
+/* ── Topbar ─────────────────────────── */
+.wam-navbar {
+  background: var(--wam-navy);
+  border-bottom: 3px solid var(--wam-accent);
+  padding: 0.4rem 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.wam-navbar .navbar-toggler-icon {
+  filter: invert(1);
+}
+.brand-icon {
+  color: var(--wam-accent);
+  font-size: 1.4rem;
+}
+.brand-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 1px;
+}
+.brand-sub {
+  display: block;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.5px;
+  margin-top: -2px;
+}
+.brand-text { line-height: 1.1; }
+
+.wam-navbar .nav-link {
+  color: rgba(255,255,255,0.75) !important;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.85rem !important;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.wam-navbar .nav-link:hover,
+.wam-navbar .nav-link.active {
+  color: #fff !important;
+  background: rgba(255,255,255,0.12);
+}
+
+.user-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 0.85rem;
+}
+.user-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+/* ── Footer ─────────────────────────── */
+.wam-footer {
+  background: var(--wam-navy);
+  color: rgba(255,255,255,0.4);
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ── Avatars ─────────────────────────── */
+.avatar-sm {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--wam-mid), var(--wam-blue));
+  color: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.avatar-xs {
+  width: 24px; height: 24px;
+  background: linear-gradient(135deg, var(--wam-mid), var(--wam-blue));
+  color: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── KPI Cards ─────────────────────────── */
+.kpi-card {
+  border: none;
+  border-radius: 10px;
+  border-left: 4px solid transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+.kpi-icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.kpi-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.kpi-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--wam-muted);
+  margin-top: 2px;
+}
+
+.kpi-total    { border-left-color: var(--wam-mid);       }
+.kpi-total    .kpi-icon { background: rgba(13,59,110,0.08); color: var(--wam-mid); }
+.kpi-total    .kpi-value { color: var(--wam-blue); }
+
+.kpi-open     { border-left-color: var(--status-open);   }
+.kpi-open     .kpi-icon { background: rgba(13,110,253,0.08); color: var(--status-open); }
+.kpi-open     .kpi-value { color: var(--status-open); }
+
+.kpi-workshop { border-left-color: var(--status-ws);     }
+.kpi-workshop .kpi-icon { background: rgba(253,126,20,0.1); color: var(--status-ws); }
+.kpi-workshop .kpi-value { color: var(--status-ws); }
+
+.kpi-engineering { border-left-color: var(--status-eng); }
+.kpi-engineering .kpi-icon { background: rgba(111,66,193,0.08); color: var(--status-eng); }
+.kpi-engineering .kpi-value { color: var(--status-eng); }
+
+.kpi-closed   { border-left-color: var(--decision-acc);  }
+.kpi-closed   .kpi-icon { background: rgba(25,135,84,0.08); color: var(--decision-acc); }
+.kpi-closed   .kpi-value { color: var(--decision-acc); }
+
+/* ── Filter Bar ─────────────────────────── */
+.filter-card {
+  border: 1px solid var(--wam-border);
+  border-radius: 8px;
+  background: var(--wam-card);
+}
+.filter-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--wam-muted);
+  margin-bottom: 2px;
+}
+
+/* ── Warranty Table ─────────────────────────── */
+.warranty-table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--wam-muted);
+  font-weight: 600;
+  border-bottom: 2px solid var(--wam-border);
+  background: #f8fafc;
+  white-space: nowrap;
+  padding: 0.6rem 0.75rem;
+}
+.warranty-table tbody td {
+  padding: 0.6rem 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--wam-border);
+}
+.warranty-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.warranty-row:hover { background: #f0f7ff !important; }
+
+.wnum { color: var(--wam-blue); font-size: 0.82rem; }
+.defect-cell { max-width: 200px; }
+
+.status-badge { font-size: 0.72rem; }
+
+/* ── Status Hero (detail page) ─────────────────────────── */
+.status-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--status-color) 10%, white);
+  border: 2px solid var(--status-color);
+}
+.status-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--status-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-color) 25%, white);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-color) 25%, white); }
+  50%       { box-shadow: 0 0 0 6px color-mix(in srgb, var(--status-color) 10%, white); }
+}
+.status-main {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--status-color);
+}
+.status-sub { font-size: 0.72rem; color: var(--wam-muted); }
+
+/* ── Info Cards (detail) ─────────────────────────── */
+.info-card {
+  border: 1px solid var(--wam-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.info-header {
+  background: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--wam-muted);
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--wam-border);
+}
+
+.info-dl dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--wam-muted);
+  margin-bottom: 1px;
+  margin-top: 8px;
+}
+.info-dl dd {
+  margin-bottom: 0;
+  font-size: 0.88rem;
+}
+.info-dl dt:first-child { margin-top: 0; }
+
+/* ── Time Metrics ─────────────────────────── */
+.time-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.time-label {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: rgba(25,135,84,0.1);
+  color: var(--decision-acc);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.time-value { font-size: 1.05rem; font-weight: 700; line-height: 1; }
+.time-sub { font-size: 0.68rem; color: var(--wam-muted); }
+
+/* ── Activity Timeline ─────────────────────────── */
+.timeline { position: relative; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 14px; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--wam-border);
+}
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  position: relative;
+}
+.timeline-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 3px #fff;
+}
+.timeline-content { flex: 1; min-width: 0; padding-top: 2px; }
+.timeline-comment {
+  background: #f8fafc;
+  border-left: 3px solid var(--wam-border);
+  padding: 4px 8px;
+  border-radius: 0 4px 4px 0;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+/* ── Previous Warranty Items ─────────────────────────── */
+.prev-warranty-item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid var(--wam-border);
+  transition: background 0.1s;
+  color: var(--wam-text) !important;
+}
+.prev-warranty-item:hover { background: #e8f0fe; }
+
+/* ── Form Cards ─────────────────────────── */
+.form-card {
+  border: 1px solid var(--wam-border);
+  border-radius: 10px;
+}
+.form-section-header {
+  background: linear-gradient(135deg, var(--wam-blue) 0%, var(--wam-mid) 100%);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+}
+.required-label::after {
+  content: ' *';
+  color: #dc3545;
+}
+.engineer-check {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background 0.1s;
+}
+.engineer-check:hover { background: #f0f7ff; border-color: var(--wam-border); }
+
+/* ── Status Option ─────────────────────────── */
+.status-option {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--wam-border);
+  transition: background 0.1s;
+}
+.status-option:hover { background: #f8fafc; }
+.status-option.active { background: #eef4ff; border-color: var(--wam-mid); }
+
+/* ── Chart Cards ─────────────────────────── */
+.chart-card {
+  border: 1px solid var(--wam-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.chart-header {
+  background: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wam-text);
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--wam-border);
+}
+
+/* ── Login Page ─────────────────────────── */
+body.login-body {
+  background: linear-gradient(135deg, var(--wam-navy) 0%, #1a3a6e 100%);
+  min-height: 100vh;
+}
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  border: none;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.login-header {
+  background: linear-gradient(135deg, var(--wam-navy), var(--wam-blue));
+  color: #fff;
+}
+.login-icon {
+  width: 56px; height: 56px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wam-accent);
+}
+.tiny { font-size: 0.68rem; }
+
+/* ── Utility ─────────────────────────── */
+.btn-xs {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+.bg-purple { background-color: #6f42c1 !important; }
+
+/* ── Responsive ─────────────────────────── */
+@media (max-width: 768px) {
+  .defect-cell { display: none; }
+  .kpi-value { font-size: 1.4rem; }
+}

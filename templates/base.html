@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}WAM — Warranty Adjudication{% endblock %}</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Font Awesome 6 -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <!-- Custom -->
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
+  {% block head %}{% endblock %}
+</head>
+<body class="wam-body">
+
+<!-- ═══════════════════════════  TOPBAR  ═══════════════════════════ -->
+<nav class="navbar navbar-expand-lg wam-navbar">
+  <div class="container-fluid px-4">
+
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('dashboard') }}">
+      <span class="brand-icon"><i class="fa-solid fa-jet-fighter-up"></i></span>
+      <span class="brand-text">
+        <span class="brand-title">WAM</span>
+        <span class="brand-sub">Warranty Adjudication</span>
+      </span>
+    </a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#mainNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-4">
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+             href="{{ url_for('dashboard') }}">
+            <i class="fa-solid fa-list-check me-1"></i>Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'warranty_new' %}active{% endif %}"
+             href="{{ url_for('warranty_new') }}">
+            <i class="fa-solid fa-plus-circle me-1"></i>New Warranty
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'statistics' %}active{% endif %}"
+             href="{{ url_for('statistics') }}">
+            <i class="fa-solid fa-chart-bar me-1"></i>Statistics
+          </a>
+        </li>
+      </ul>
+
+      {% if current_user.is_authenticated %}
+      <div class="dropdown">
+        <button class="btn btn-sm user-btn dropdown-toggle d-flex align-items-center gap-2"
+                data-bs-toggle="dropdown">
+          <span class="avatar-sm">{{ current_user.initials }}</span>
+          <span class="d-none d-md-inline">{{ current_user.full_name }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><span class="dropdown-item-text small text-muted">{{ current_user.role|title }}</span></li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
+              <i class="fa-solid fa-right-from-bracket me-1"></i>Logout
+            </a>
+          </li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════  FLASH  ═══════════════════════════ -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="container-fluid px-4 pt-3">
+  {% for cat, msg in messages %}
+  <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 small" role="alert">
+    <i class="fa-solid fa-circle-info me-1"></i>{{ msg|safe }}
+    <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- ═══════════════════════════  MAIN  ═══════════════════════════ -->
+<main class="container-fluid px-4 py-3">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ═══════════════════════════  FOOTER  ═══════════════════════════ -->
+<footer class="wam-footer">
+  <span class="text-muted small">
+    &copy; {{ now().year }} Warranty Adjudication Management &mdash; Aerospace Part 145 MRO
+  </span>
+</footer>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

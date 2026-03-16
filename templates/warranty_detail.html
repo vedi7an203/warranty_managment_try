@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+{% block title %}{{ w.warranty_number }} — WAM{% endblock %}
+
+{% block content %}
+<!-- ────────────────────────  BREADCRUMB + HEADER  ──────────────────────── -->
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+  <div>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb mb-1 small">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">{{ w.warranty_number }}</li>
+      </ol>
+    </nav>
+    <h3 class="mb-1 fw-bold">
+      <span class="font-monospace">{{ w.warranty_number }}</span>
+      {% if w.previous_warranty_count > 0 %}
+      <span class="badge bg-warning text-dark ms-2 small align-middle"
+            title="This unit has {{ w.previous_warranty_count }} previous warranty case(s)">
+        <i class="fa-solid fa-rotate-left"></i> {{ w.previous_warranty_count }} prev.
+      </span>
+      {% endif %}
+    </h3>
+    <p class="text-muted mb-0 small">
+      {{ w.lru_description or w.lru_part_number }}
+      &nbsp;&bull;&nbsp; {{ w.customer.name if w.customer else '—' }}
+      &nbsp;&bull;&nbsp; Created {{ w.created_at|fdatetime }} by {{ w.created_by_user.full_name }}
+    </p>
+  </div>
+
+  <!-- Status badge (large) -->
+  <div class="text-end">
+    <div class="status-hero" style="--status-color: {{ w.status_hex }}">
+      <div class="status-dot"></div>
+      <div>
+        <div class="status-main">{{ w.effective_status_label }}</div>
+        {% if w.status == 'closed' and w.closed_at %}
+        <div class="status-sub">Closed {{ w.closed_at|fdate }}</div>
+        {% else %}
+        <div class="status-sub">Since {{ w.adjudication_start_date|fdate }}</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="mt-2 d-flex gap-2 justify-content-end">
+      <a href="{{ url_for('warranty_edit', warranty_id=w.id) }}"
+         class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-pen me-1"></i>Edit
+      </a>
+      <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+              data-bs-target="#statusModal">
+        <i class="fa-solid fa-exchange-alt me-1"></i>Change Status
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- ════════════════  LEFT COLUMN  ════════════════ -->
+  <div class="col-12 col-xl-8">
+
+    <!-- Summary Cards row 1 -->
+    <div class="row g-3 mb-3">
+      <!-- Part Info -->
+      <div class="col-md-6">
+        <div class="card info-card h-100">
+          <div class="card-header info-header">
+            <i class="fa-solid fa-microchip me-2 text-primary"></i>LRU / Part
+          </div>
+          <div class="card-body">
+            <dl class="info-dl mb-0">
+              <dt>Part Number</dt>
+              <dd class="font-monospace fw-bold">{{ w.lru_part_number }}</dd>
+              <dt>Serial Number</dt>
+              <dd class="font-monospace">{{ w.lru_serial_number }}</dd>
+              {% if w.lru_description %}
+              <dt>Description</dt>
+              <dd>{{ w.lru_description }}</dd>
+              {% endif %}
+              {% if w.ata_chapter %}
+              <dt>ATA Chapter</dt>
+              <dd>{{ w.ata_chapter }}</dd>
+              {% endif %}
+              <dt>Customer</dt>
+              <dd>{{ w.customer.name if w.customer else '—' }}
+                {% if w.customer %}<span class="text-muted small">({{ w.customer.code }})</span>{% endif %}
+              </dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCO / Dates -->
+      <div class="col-md-6">
+        <div class="card info-card h-100">
+          <div class="card-header info-header">
+            <i class="fa-solid fa-clipboard-list me-2 text-info"></i>MCO &amp; Dates
+          </div>
+          <div class="card-body">
+            <dl class="info-dl mb-0">
+              <dt>Current MCO</dt>
+              <dd class="font-monospace fw-bold text-primary">{{ w.current_mco }}</dd>
+              <dt>Former MCO</dt>
+              <dd class="font-monospace">{{ w.former_mco or '—' }}</dd>
+              <dt>Former ARC Date</dt>
+              <dd>{{ w.former_arc_date|fdate }}</dd>
+              <dt>Adjudication Start</dt>
+              <dd>{{ w.adjudication_start_date|fdate }}</dd>
+              <dt>Date of Defect</dt>
+              <dd>{{ w.defect_date|fdate }}</dd>
+              {% if w.installation_date %}
+              <dt>Installation Date</dt>
+              <dd>{{ w.installation_date|fdate }}</dd>
+              {% endif %}
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Cards row 2 -->
+    <div class="row g-3 mb-3">
+      <!-- Defect -->
+      <div class="col-md-8">
+        <div class="card info-card h-100">
+          <div class="card-header info-header">
+            <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Defect Details
+          </div>
+          <div class="card-body">
+            <p class="small fw-semibold text-muted mb-1">Observed Defect</p>
+            <p class="mb-3">{{ w.observed_defect }}</p>
+            {% if w.reason_for_removal %}
+            <p class="small fw-semibold text-muted mb-1">Reason for Removal</p>
+            <p class="mb-0">{{ w.reason_for_removal }}</p>
+            {% endif %}
+            {% if w.status == 'closed' and w.closure_comments %}
+            <hr class="my-2">
+            <p class="small fw-semibold text-muted mb-1">Closure Comments</p>
+            <p class="mb-0 small">{{ w.closure_comments }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Time Params -->
+      <div class="col-md-4">
+        <div class="card info-card h-100">
+          <div class="card-header info-header">
+            <i class="fa-solid fa-clock-rotate-left me-2 text-success"></i>Time Params
+          </div>
+          <div class="card-body">
+            <div class="time-metric mb-3">
+              <div class="time-label">TSI</div>
+              <div class="time-value">{{ w.tsi|hours }}</div>
+              <div class="time-sub">Time Since Installation</div>
+            </div>
+            <div class="time-metric mb-3">
+              <div class="time-label">TSO</div>
+              <div class="time-value">{{ w.tso|hours }}</div>
+              <div class="time-sub">Time Since Overhaul</div>
+            </div>
+            {% if w.flight_cycles_since_installation %}
+            <div class="time-metric">
+              <div class="time-label">FC</div>
+              <div class="time-value">{{ w.flight_cycles_since_installation }}</div>
+              <div class="time-sub">Flight Cycles</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Timeline -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-timeline me-2 text-secondary"></i>Activity Log</span>
+        <span class="badge bg-secondary">{{ activities|length }} events</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="timeline px-3 py-2">
+          {% for act in activities %}
+          <div class="timeline-item">
+            <div class="timeline-dot bg-{{ act.activity_color }}">
+              <i class="fa-solid {{ act.activity_icon }} fa-xs"></i>
+            </div>
+            <div class="timeline-content">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <span class="fw-semibold small">{{ act.user.full_name }}</span>
+                  <span class="badge bg-{{ act.activity_color }} ms-1 small">
+                    {{ act.activity_type|replace('_', ' ')|title }}
+                  </span>
+                  {% if act.old_value and act.new_value %}
+                  <span class="text-muted small ms-1">
+                    <span class="badge bg-light text-dark border">{{ act.old_value }}</span>
+                    <i class="fa-solid fa-arrow-right mx-1 tiny"></i>
+                    <span class="badge bg-light text-dark border">{{ act.new_value }}</span>
+                  </span>
+                  {% endif %}
+                </div>
+                <span class="text-muted small ms-2 text-nowrap">
+                  {{ act.timestamp|fdatetime }}
+                </span>
+              </div>
+              {% if act.comment %}
+              <p class="mb-0 mt-1 small text-muted timeline-comment">{{ act.comment }}</p>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <p class="text-muted small py-2">No activity recorded yet.</p>
+          {% endfor %}
+        </div>
+
+        <!-- Add Comment -->
+        <div class="px-3 pb-3 pt-1 border-top">
+          <form method="POST" action="{{ url_for('add_comment', warranty_id=w.id) }}">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">
+                <i class="fa-solid fa-comment-dots text-info"></i>
+              </span>
+              <input type="text" name="comment" class="form-control"
+                     placeholder="Add a comment or investigation note…" required/>
+              <button type="submit" class="btn btn-info text-white btn-sm">
+                Add Note
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════  RIGHT COLUMN  ════════════════ -->
+  <div class="col-12 col-xl-4">
+
+    <!-- Assigned Engineers -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-users-gear me-2 text-primary"></i>Assigned Engineers</span>
+        <button class="btn btn-xs btn-outline-primary" data-bs-toggle="collapse"
+                data-bs-target="#addEngPanel">
+          <i class="fa-solid fa-user-plus"></i>
+        </button>
+      </div>
+      <div class="card-body">
+        {% if w.engineers %}
+        <div class="d-flex flex-column gap-2 mb-2">
+          {% for eng in w.engineers %}
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+              <span class="avatar-sm">{{ eng.initials }}</span>
+              <div>
+                <div class="small fw-semibold">{{ eng.full_name }}</div>
+                <div class="tiny text-muted">{{ eng.email }}</div>
+              </div>
+            </div>
+            <form method="POST" action="{{ url_for('manage_engineer', warranty_id=w.id) }}">
+              <input type="hidden" name="engineer_id" value="{{ eng.id }}"/>
+              <input type="hidden" name="action" value="remove"/>
+              <button type="submit" class="btn btn-xs btn-outline-danger"
+                      title="Remove engineer">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-2">No engineers assigned yet.</p>
+        {% endif %}
+
+        <!-- Add engineer panel -->
+        <div class="collapse" id="addEngPanel">
+          <hr class="my-2">
+          <p class="small fw-semibold mb-2">Assign engineer:</p>
+          {% set assigned_ids = w.engineers | map(attribute='id') | list %}
+          {% for eng in all_engineers %}
+          {% if eng.id not in assigned_ids %}
+          <form method="POST" action="{{ url_for('manage_engineer', warranty_id=w.id) }}"
+                class="mb-1">
+            <input type="hidden" name="engineer_id" value="{{ eng.id }}"/>
+            <input type="hidden" name="action" value="assign"/>
+            <button type="submit" class="btn btn-sm btn-outline-success w-100 text-start">
+              <span class="avatar-xs me-1">{{ eng.initials }}</span>
+              {{ eng.full_name }}
+            </button>
+          </form>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Previous Warranty History -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header d-flex align-items-center gap-2">
+        <i class="fa-solid fa-rotate-left text-warning"></i>
+        Previous Warranty History
+        <span class="badge {{ 'bg-warning text-dark' if previous_warranties else 'bg-secondary' }} ms-auto">
+          {{ previous_warranties|length }}
+        </span>
+      </div>
+      <div class="card-body">
+        {% if previous_warranties %}
+        <p class="small text-muted mb-2">
+          Unit <strong>{{ w.lru_serial_number }}</strong> has been under
+          warranty <strong>{{ previous_warranties|length }}</strong>
+          previous time{{ 's' if previous_warranties|length != 1 }}.
+        </p>
+        <div class="d-flex flex-column gap-2">
+          {% for pw in previous_warranties %}
+          <a href="{{ url_for('warranty_detail', warranty_id=pw.id) }}"
+             class="prev-warranty-item text-decoration-none">
+            <div class="d-flex justify-content-between align-items-start">
+              <span class="font-monospace small fw-bold">{{ pw.warranty_number }}</span>
+              <span class="badge bg-{{ pw.status_color }} small">
+                {{ pw.effective_status_label }}
+              </span>
+            </div>
+            <div class="text-muted tiny mt-1">
+              {{ pw.adjudication_start_date|fdate }} &bull; {{ pw.customer.name if pw.customer }}
+            </div>
+            <div class="text-muted tiny">
+              {{ pw.observed_defect[:60] }}{{ '…' if pw.observed_defect|length > 60 }}
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-3">
+          <i class="fa-solid fa-circle-check fa-2x text-success mb-2 d-block"></i>
+          <p class="text-muted small mb-0">First warranty for this unit.</p>
+          <p class="text-muted tiny">S/N {{ w.lru_serial_number }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════  STATUS CHANGE MODAL  ════════════════════════════ -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('update_status', warranty_id=w.id) }}" id="statusForm">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fa-solid fa-exchange-alt me-2"></i>Change Warranty Status
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">
+            Current status:
+            <span class="badge bg-{{ w.status_color }}">{{ w.effective_status_label }}</span>
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">New Status</label>
+            <div class="d-flex flex-column gap-2">
+              {% for val, lbl in WarrantyStatus.CHOICES %}
+              <div class="form-check status-option {% if val == w.status %}active{% endif %}">
+                <input class="form-check-input" type="radio" name="status"
+                       value="{{ val }}" id="s_{{ val }}"
+                       {{ 'checked' if val == w.status }}
+                       onchange="toggleClosurePanel()">
+                <label class="form-check-label" for="s_{{ val }}">
+                  <span class="badge" style="background:{{ WarrantyStatus.HEX[val] }}">
+                    {{ lbl }}
+                  </span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Closure decision (only shown when Closed is selected) -->
+          <div id="closurePanel" class="collapse
+               {% if w.status == 'closed' %}show{% endif %}">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Closure Decision <span class="text-danger">*</span></label>
+              <div class="d-flex flex-column gap-2">
+                {% for val, lbl in ClosureDecision.CHOICES %}
+                <div class="form-check status-option">
+                  <input class="form-check-input" type="radio" name="closure_decision"
+                         value="{{ val }}" id="d_{{ val }}"
+                         {{ 'checked' if w.closure_decision == val }}>
+                  <label class="form-check-label" for="d_{{ val }}">
+                    <span class="badge" style="background:{{ ClosureDecision.HEX[val] }}">{{ lbl }}</span>
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Comment</label>
+            <textarea name="comment" class="form-control" rows="3"
+                      placeholder="Add context for this status change…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check me-1"></i>Update Status
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleClosurePanel() {
+  const val = document.querySelector('input[name="status"]:checked')?.value;
+  const panel = document.getElementById('closurePanel');
+  if (val === 'closed') {
+    panel.classList.add('show');
+  } else {
+    panel.classList.remove('show');
+  }
+}
+
+// Validate closure decision required
+document.getElementById('statusForm').addEventListener('submit', function(e) {
+  const status = document.querySelector('input[name="status"]:checked')?.value;
+  if (status === 'closed') {
+    const decision = document.querySelector('input[name="closure_decision"]:checked');
+    if (!decision) {
+      e.preventDefault();
+      alert('Please select a closure decision before closing the warranty.');
+    }
+  }
+});
+</script>
+{% endblock %}

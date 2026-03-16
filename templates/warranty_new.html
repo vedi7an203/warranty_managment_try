@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}New Warranty — WAM{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-4">
+  <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+  <h4 class="mb-0 fw-bold"><i class="fa-solid fa-plus-circle text-success me-2"></i>New Warranty Request</h4>
+</div>
+
+<form method="POST" action="{{ url_for('warranty_new') }}" id="warrantyForm" novalidate>
+<div class="row g-4">
+
+  <!-- ── Col 1 ─────────────────────────────────────── -->
+  <div class="col-12 col-xl-6">
+
+    <!-- Part Information -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-microchip me-2"></i>LRU / Part Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label required-label">LRU Part Number</label>
+            <input type="text" name="lru_part_number" class="form-control text-uppercase"
+                   placeholder="e.g. P145-AHRS-0210" required/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">LRU Serial Number</label>
+            <input type="text" name="lru_serial_number" class="form-control text-uppercase"
+                   placeholder="e.g. SN-12345" required/>
+          </div>
+          <div class="col-12">
+            <label class="form-label">LRU Description</label>
+            <input type="text" name="lru_description" class="form-control"
+                   placeholder="e.g. Attitude &amp; Heading Reference System"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">Customer</label>
+            <select name="customer_id" class="form-select" required>
+              <option value="">Select customer…</option>
+              {% for c in customers %}
+              <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ATA Chapter</label>
+            <input type="text" name="ata_chapter" class="form-control text-uppercase"
+                   placeholder="e.g. 34-21"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MCO Information -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-clipboard-list me-2"></i>MCO / Maintenance Order Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label required-label">Current MCO</label>
+            <input type="text" name="current_mco" class="form-control text-uppercase"
+                   placeholder="MCO under investigation" required/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Former MCO</label>
+            <input type="text" name="former_mco" class="form-control text-uppercase"
+                   placeholder="Previous repair MCO"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Former ARC Date</label>
+            <input type="date" name="former_arc_date" class="form-control"
+                   title="Date of former Authorised Release Certificate"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Installation Date</label>
+            <input type="date" name="installation_date" class="form-control"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Time Parameters -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-clock-rotate-left me-2"></i>Time Parameters
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">TSI (hours)</label>
+            <input type="number" name="tsi" class="form-control" step="0.1" min="0"
+                   placeholder="Time Since Installation"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">TSO (hours)</label>
+            <input type="number" name="tso" class="form-control" step="0.1" min="0"
+                   placeholder="Time Since Overhaul"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Flight Cycles</label>
+            <input type="number" name="flight_cycles" class="form-control" min="0"
+                   placeholder="Cycles since install."/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Col 2 ─────────────────────────────────────── -->
+  <div class="col-12 col-xl-6">
+
+    <!-- Defect Information -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>Defect Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Date of Defect</label>
+            <input type="date" name="defect_date" class="form-control"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">Adjudication Start Date</label>
+            <input type="date" name="adjudication_start_date" class="form-control"
+                   value="{{ today }}" required/>
+          </div>
+          <div class="col-12">
+            <label class="form-label required-label">Observed Defect</label>
+            <textarea name="observed_defect" class="form-control" rows="4"
+                      placeholder="Describe the observed defect or fault as reported by the customer…"
+                      required></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Reason for Removal</label>
+            <textarea name="reason_for_removal" class="form-control" rows="3"
+                      placeholder="Why was the unit removed from the aircraft?"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Engineer Assignment -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-user-gear me-2"></i>Engineer Assignment
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-2">Select one or more engineers responsible for this case.</p>
+        <div class="row g-2">
+          {% for eng in engineers %}
+          <div class="col-md-6">
+            <div class="form-check engineer-check">
+              <input class="form-check-input" type="checkbox"
+                     name="engineer_ids" value="{{ eng.id }}"
+                     id="eng_{{ eng.id }}"/>
+              <label class="form-check-label" for="eng_{{ eng.id }}">
+                <span class="avatar-xs me-1">{{ eng.initials }}</span>
+                {{ eng.full_name }}
+                <span class="text-muted small">({{ eng.role }})</span>
+              </label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success flex-grow-1">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Create Warranty
+      </button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+        Cancel
+      </a>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Bootstrap validation
+document.getElementById('warrantyForm').addEventListener('submit', function(e) {
+  if (!this.checkValidity()) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  this.classList.add('was-validated');
+});
+// Auto-uppercase
+document.querySelectorAll('.text-uppercase').forEach(el => {
+  el.addEventListener('input', () => { el.value = el.value.toUpperCase(); });
+});
+</script>
+{% endblock %}

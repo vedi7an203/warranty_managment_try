@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — WAM</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
+</head>
+<body class="login-body d-flex align-items-center justify-content-center min-vh-100">
+
+<div class="login-card card shadow-lg">
+  <!-- Header -->
+  <div class="login-header text-center p-4">
+    <div class="login-icon mb-3">
+      <i class="fa-solid fa-jet-fighter-up fa-2x"></i>
+    </div>
+    <h4 class="fw-bold mb-0">WAM</h4>
+    <p class="small opacity-75 mb-0">Warranty Adjudication Management</p>
+    <p class="tiny opacity-50">Aerospace Part 145 MRO</p>
+  </div>
+
+  <!-- Body -->
+  <div class="card-body p-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} py-2 small">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('login') }}">
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Username</label>
+        <div class="input-group">
+          <span class="input-group-text bg-light border-end-0">
+            <i class="fa-solid fa-user text-muted"></i>
+          </span>
+          <input type="text" name="username" class="form-control border-start-0"
+                 placeholder="Enter username" autofocus required/>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Password</label>
+        <div class="input-group">
+          <span class="input-group-text bg-light border-end-0">
+            <i class="fa-solid fa-lock text-muted"></i>
+          </span>
+          <input type="password" name="password" class="form-control border-start-0"
+                 placeholder="Enter password" required/>
+        </div>
+      </div>
+      <div class="mb-4 form-check">
+        <input class="form-check-input" type="checkbox" name="remember" id="rememberMe"/>
+        <label class="form-check-label small" for="rememberMe">Remember me</label>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 fw-semibold">
+        <i class="fa-solid fa-right-to-bracket me-1"></i>Sign In
+      </button>
+    </form>
+
+    <div class="mt-4 p-3 bg-light rounded small text-muted">
+      <strong>Demo accounts:</strong><br>
+      Admin: <code>admin</code> / <code>Admin123!</code><br>
+      Engineer: <code>j.smith</code> / <code>Engineer1!</code>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

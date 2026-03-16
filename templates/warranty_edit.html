@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ w.warranty_number }} — WAM{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-4">
+  <a href="{{ url_for('warranty_detail', warranty_id=w.id) }}"
+     class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+  <h4 class="mb-0 fw-bold">
+    <i class="fa-solid fa-pen text-warning me-2"></i>
+    Edit Warranty — <span class="font-monospace">{{ w.warranty_number }}</span>
+  </h4>
+  <span class="badge bg-{{ w.status_color }} ms-1">{{ w.effective_status_label }}</span>
+</div>
+
+<form method="POST" action="{{ url_for('warranty_edit', warranty_id=w.id) }}" novalidate>
+<div class="row g-4">
+
+  <!-- ── Col 1 ─────────────────────────────────────── -->
+  <div class="col-12 col-xl-6">
+
+    <!-- Part Information -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-microchip me-2"></i>LRU / Part Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label required-label">LRU Part Number</label>
+            <input type="text" name="lru_part_number" class="form-control text-uppercase"
+                   value="{{ w.lru_part_number }}" required/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">LRU Serial Number</label>
+            <input type="text" name="lru_serial_number" class="form-control text-uppercase"
+                   value="{{ w.lru_serial_number }}" required/>
+          </div>
+          <div class="col-12">
+            <label class="form-label">LRU Description</label>
+            <input type="text" name="lru_description" class="form-control"
+                   value="{{ w.lru_description or '' }}"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">Customer</label>
+            <select name="customer_id" class="form-select" required>
+              {% for c in customers %}
+              <option value="{{ c.id }}" {{ 'selected' if c.id == w.customer_id }}>
+                {{ c.name }} ({{ c.code }})
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ATA Chapter</label>
+            <input type="text" name="ata_chapter" class="form-control text-uppercase"
+                   value="{{ w.ata_chapter or '' }}"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MCO Information -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-clipboard-list me-2"></i>MCO / Maintenance Order Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label required-label">Current MCO</label>
+            <input type="text" name="current_mco" class="form-control text-uppercase"
+                   value="{{ w.current_mco }}" required/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Former MCO</label>
+            <input type="text" name="former_mco" class="form-control text-uppercase"
+                   value="{{ w.former_mco or '' }}"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Former ARC Date</label>
+            <input type="date" name="former_arc_date" class="form-control"
+                   value="{{ w.former_arc_date.isoformat() if w.former_arc_date else '' }}"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Installation Date</label>
+            <input type="date" name="installation_date" class="form-control"
+                   value="{{ w.installation_date.isoformat() if w.installation_date else '' }}"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Time Parameters -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-clock-rotate-left me-2"></i>Time Parameters
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">TSI (hours)</label>
+            <input type="number" name="tsi" class="form-control" step="0.1" min="0"
+                   value="{{ w.tsi or '' }}"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">TSO (hours)</label>
+            <input type="number" name="tso" class="form-control" step="0.1" min="0"
+                   value="{{ w.tso or '' }}"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Flight Cycles</label>
+            <input type="number" name="flight_cycles" class="form-control" min="0"
+                   value="{{ w.flight_cycles_since_installation or '' }}"/>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Col 2 ─────────────────────────────────────── -->
+  <div class="col-12 col-xl-6">
+
+    <!-- Defect -->
+    <div class="card form-card mb-3">
+      <div class="card-header form-section-header">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>Defect Information
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Date of Defect</label>
+            <input type="date" name="defect_date" class="form-control"
+                   value="{{ w.defect_date.isoformat() if w.defect_date else '' }}"/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required-label">Adjudication Start Date</label>
+            <input type="date" name="adjudication_start_date" class="form-control"
+                   value="{{ w.adjudication_start_date.isoformat() }}" required/>
+          </div>
+          <div class="col-12">
+            <label class="form-label required-label">Observed Defect</label>
+            <textarea name="observed_defect" class="form-control" rows="4"
+                      required>{{ w.observed_defect }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Reason for Removal</label>
+            <textarea name="reason_for_removal" class="form-control"
+                      rows="3">{{ w.reason_for_removal or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="card form-card mb-3">
+      <div class="card-body">
+        <div class="alert alert-info py-2 small mb-3">
+          <i class="fa-solid fa-info-circle me-1"></i>
+          All changes will be logged in the warranty activity timeline.
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-warning flex-grow-1">
+            <i class="fa-solid fa-floppy-disk me-1"></i>Save Changes
+          </button>
+          <a href="{{ url_for('warranty_detail', warranty_id=w.id) }}"
+             class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.text-uppercase').forEach(el => {
+  el.addEventListener('input', () => { el.value = el.value.toUpperCase(); });
+});
+</script>
+{% endblock %}
