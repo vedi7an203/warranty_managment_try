@@ -975,9 +975,7 @@ def seed_warranties():
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
-# Initialise DB at startup (tables + seed data) for WSGI servers like Gunicorn
-with app.app_context():
-    _init_db()
-
+# DB initialisation is handled by the CLI command `flask init-db`
+# (run automatically via render.yaml preDeployCommand before Gunicorn starts).
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
