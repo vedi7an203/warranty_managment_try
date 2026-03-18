@@ -29,6 +29,9 @@ _db_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/warranty_db').s
 _parsed = urlparse(_db_url)
 if _parsed.scheme == 'postgres':
     _db_url = urlunparse(_parsed._replace(scheme='postgresql'))
+# Write back so any library reading DATABASE_URL directly (some Flask-SQLAlchemy
+# versions auto-read DATABASE_URL from the environment) gets the fixed scheme too.
+os.environ['DATABASE_URL'] = _db_url
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # pool_pre_ping detects stale connections (important on Render's managed PostgreSQL)
