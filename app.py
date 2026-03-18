@@ -4,6 +4,7 @@ Aerospace Part 145 MRO Company
 """
 import os
 import json
+import re
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
@@ -22,10 +23,10 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY',
     'aerospace-wam-secret-change-in-prod-2024')
 # Render / production supplies DATABASE_URL (postgres://...).
 # For local development use: export DATABASE_URL=postgresql://localhost/warranty_db
-_db_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/warranty_db')
-# SQLAlchemy 2.0 requires postgresql:// — Render still returns the legacy postgres:// scheme
-if _db_url.startswith('postgres://'):
-    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+_db_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/warranty_db').strip()
+# SQLAlchemy 2.0 removed the legacy 'postgres' dialect alias — must be 'postgresql'.
+# Use regex to safely rewrite the scheme regardless of spacing or driver suffix.
+_db_url = re.sub(r'^postgres(?!ql)((\+\w+)?://)', r'postgresql\1', _db_url)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # pool_pre_ping detects stale connections (important on Render's managed PostgreSQL)
