@@ -980,7 +980,11 @@ def seed_warranties():
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
-# DB initialisation is handled by the CLI command `flask init-db`
-# (run automatically via render.yaml preDeployCommand before Gunicorn starts).
+# Ensure tables exist on every startup (idempotent — safe to run repeatedly).
+# This covers deployments where the preDeployCommand is not executed
+# (e.g. services created via the Render dashboard instead of render.yaml).
+with app.app_context():
+    _init_db()
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
