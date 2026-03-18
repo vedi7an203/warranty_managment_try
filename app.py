@@ -29,10 +29,43 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'warning'
 
-# Créer les tables automatiquement au démarrage
-with app.app_context():
+# Créer les tables automatiquement au démarrage (init_db_cmd défini plus bas)
+def _init_db():
+    """Create tables and seed reference data (called at startup and via CLI)."""
     db.create_all()
-    init_db_cmd()
+
+    if not User.query.filter_by(username='admin').first():
+        admin = User(username='admin', email='admin@mro.aero',
+                     first_name='Admin', last_name='User', role='admin')
+        admin.set_password('Admin123!')
+        db.session.add(admin)
+
+    for uname, email, fn, ln in [
+        ('j.smith',   'j.smith@mro.aero',   'James',  'Smith'),
+        ('m.wilson',  'm.wilson@mro.aero',  'Marie',  'Wilson'),
+        ('s.martin',  's.martin@mro.aero',  'Sophie', 'Martin'),
+        ('r.johnson', 'r.johnson@mro.aero', 'Robert', 'Johnson'),
+        ('p.dubois',  'p.dubois@mro.aero',  'Pierre', 'Dubois'),
+    ]:
+        if not User.query.filter_by(username=uname).first():
+            u = User(username=uname, email=email, first_name=fn,
+                     last_name=ln, role='engineer')
+            u.set_password('Engineer1!')
+            db.session.add(u)
+
+    for code, name, email, country in [
+        ('AIR_FR',    'Air France',       'warranty@airfrance.fr',        'France'),
+        ('LUFTH',     'Lufthansa Technik','warranty@lufthansa-technik.de', 'Germany'),
+        ('EMIRATES',  'Emirates',         'mro@emirates.com',              'UAE'),
+        ('BRIT_AW',   'British Airways',  'techops@ba.com',                'UK'),
+        ('RYANAIR',   'Ryanair',          'mro@ryanair.com',               'Ireland'),
+        ('EASYJET',   'easyJet',          'engineering@easyjet.com',       'UK'),
+    ]:
+        if not Customer.query.filter_by(code=code).first():
+            db.session.add(Customer(code=code, name=name,
+                                    contact_email=email, country=country))
+
+    db.session.commit()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -792,40 +825,7 @@ def api_statistics():
 @app.cli.command('init-db')
 def init_db_cmd():
     """Create tables and seed reference data."""
-    db.create_all()
-
-    if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin', email='admin@mro.aero',
-                     first_name='Admin', last_name='User', role='admin')
-        admin.set_password('Admin123!')
-        db.session.add(admin)
-
-    for uname, email, fn, ln in [
-        ('j.smith',   'j.smith@mro.aero',   'James',  'Smith'),
-        ('m.wilson',  'm.wilson@mro.aero',  'Marie',  'Wilson'),
-        ('s.martin',  's.martin@mro.aero',  'Sophie', 'Martin'),
-        ('r.johnson', 'r.johnson@mro.aero', 'Robert', 'Johnson'),
-        ('p.dubois',  'p.dubois@mro.aero',  'Pierre', 'Dubois'),
-    ]:
-        if not User.query.filter_by(username=uname).first():
-            u = User(username=uname, email=email, first_name=fn,
-                     last_name=ln, role='engineer')
-            u.set_password('Engineer1!')
-            db.session.add(u)
-
-    for code, name, email, country in [
-        ('AIR_FR',    'Air France',       'warranty@airfrance.fr',        'France'),
-        ('LUFTH',     'Lufthansa Technik','warranty@lufthansa-technik.de', 'Germany'),
-        ('EMIRATES',  'Emirates',         'mro@emirates.com',              'UAE'),
-        ('BRIT_AW',   'British Airways',  'techops@ba.com',                'UK'),
-        ('RYANAIR',   'Ryanair',          'mro@ryanair.com',               'Ireland'),
-        ('EASYJET',   'easyJet',          'engineering@easyjet.com',       'UK'),
-    ]:
-        if not Customer.query.filter_by(code=code).first():
-            db.session.add(Customer(code=code, name=name,
-                                    contact_email=email, country=country))
-
-    db.session.commit()
+    _init_db()
     print("✓ Database initialised.")
     print("  Admin    : admin / Admin123!")
     print("  Engineers: j.smith, m.wilson … / Engineer1!")
@@ -964,18 +964,9 @@ def seed_warranties():
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
+# Initialise DB at startup (tables + seed data) for WSGI servers like Gunicorn
+with app.app_context():
+    _init_db()
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # Auto-seed on first run
-        if User.query.count() == 0:
-            from flask.cli import FlaskGroup
-            import sys
-            print("First run — initialising database with sample data …")
-            from click.testing import CliRunner
-            runner = CliRunner()
-            with app.app_context():
-                db.create_all()
-                # call seed functions directly
-                init_db_cmd.__wrapped__() if hasattr(init_db_cmd, '__wrapped__') else None
     app.run(debug=True, host='0.0.0.0', port=5000)
