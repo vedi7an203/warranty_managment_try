@@ -32,6 +32,7 @@ login_manager.login_message_category = 'warning'
 # Créer les tables automatiquement au démarrage
 with app.app_context():
     db.create_all()
+    init_db_cmd()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
