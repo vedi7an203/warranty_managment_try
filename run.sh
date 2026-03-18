@@ -19,6 +19,13 @@ fi
 export FLASK_APP=app.py
 export FLASK_ENV=development
 
+# PostgreSQL is required. Set DATABASE_URL before running this script, e.g.:
+#   export DATABASE_URL=postgresql://localhost/warranty_db
+if [ -z "$DATABASE_URL" ]; then
+  echo "[!] DATABASE_URL is not set. Defaulting to postgresql://localhost/warranty_db"
+  export DATABASE_URL=postgresql://localhost/warranty_db
+fi
+
 echo "[*] Initialising database…"
 flask init-db
 

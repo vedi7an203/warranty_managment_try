@@ -20,17 +20,19 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY',
     'aerospace-wam-secret-change-in-prod-2024')
-_db_url = os.environ.get('DATABASE_URL')
-if _db_url:
-    # Render provides postgres:// but SQLAlchemy 2.0 requires postgresql://
-    if _db_url.startswith('postgres://'):
-        _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
-else:
-    # Use absolute path so SQLite works regardless of working directory (Gunicorn, etc.)
-    _basedir = os.path.abspath(os.path.dirname(__file__))
-    _db_url = 'sqlite:///' + os.path.join(_basedir, 'warranty.db')
+# Render / production supplies DATABASE_URL (postgres://...).
+# For local development use: export DATABASE_URL=postgresql://localhost/warranty_db
+_db_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/warranty_db')
+# SQLAlchemy 2.0 requires postgresql:// — Render still returns the legacy postgres:// scheme
+if _db_url.startswith('postgres://'):
+    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# pool_pre_ping detects stale connections (important on Render's managed PostgreSQL)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
