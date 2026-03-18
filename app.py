@@ -5,6 +5,9 @@ Aerospace Part 145 MRO Company
 import os
 import json
 import re
+import secrets
+import string
+from functools import wraps
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime, date, timedelta
 from collections import defaultdict
@@ -834,6 +837,191 @@ def api_statistics():
         by_engineer  = {'labels': [e[0] for e in eng_sorted],  'data': [e[1] for e in eng_sorted]},
         kpi          = {'total': total, 'open': n_open, 'closed': n_closed, 'acc_rate': acc_rate},
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADMIN — Users & Customers management
+# ─────────────────────────────────────────────────────────────────────────────
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_panel():
+    tab = request.args.get('tab', 'users')
+    users = User.query.order_by(User.last_name, User.first_name).all()
+    customers = Customer.query.order_by(Customer.name).all()
+    return render_template('admin.html', users=users, customers=customers, tab=tab)
+
+
+@app.route('/admin/users/new', methods=['POST'])
+@login_required
+@admin_required
+def admin_user_new():
+    username = request.form['username'].strip()
+    email    = request.form['email'].strip()
+    if User.query.filter_by(username=username).first():
+        flash(f'Username "{username}" already exists.', 'danger')
+        return redirect(url_for('admin_panel', tab='users'))
+    if User.query.filter_by(email=email).first():
+        flash(f'Email "{email}" already in use.', 'danger')
+        return redirect(url_for('admin_panel', tab='users'))
+    u = User(username=username, email=email,
+             first_name=request.form['first_name'].strip(),
+             last_name=request.form['last_name'].strip(),
+             role=request.form['role'])
+    u.set_password(request.form['password'])
+    db.session.add(u)
+    db.session.commit()
+    flash(f'User {u.full_name} created.', 'success')
+    return redirect(url_for('admin_panel', tab='users'))
+
+
+@app.route('/admin/users/<int:uid>/edit', methods=['POST'])
+@login_required
+@admin_required
+def admin_user_edit(uid):
+    u = User.query.get_or_404(uid)
+    new_email = request.form['email'].strip()
+    conflict = User.query.filter(User.email == new_email, User.id != uid).first()
+    if conflict:
+        flash(f'Email "{new_email}" already in use.', 'danger')
+        return redirect(url_for('admin_panel', tab='users'))
+    u.first_name = request.form['first_name'].strip()
+    u.last_name  = request.form['last_name'].strip()
+    u.email      = new_email
+    u.role       = request.form['role']
+    db.session.commit()
+    flash(f'User {u.full_name} updated.', 'success')
+    return redirect(url_for('admin_panel', tab='users'))
+
+
+@app.route('/admin/users/<int:uid>/reset-password', methods=['POST'])
+@login_required
+@admin_required
+def admin_reset_password(uid):
+    u = User.query.get_or_404(uid)
+    new_pw = request.form.get('new_password', '').strip()
+    if not new_pw:
+        alphabet = string.ascii_letters + string.digits
+        new_pw = ''.join(secrets.choice(alphabet) for _ in range(12))
+    u.set_password(new_pw)
+    db.session.commit()
+    flash(f'Password reset for <strong>{u.full_name}</strong>. '
+          f'New password: <code>{new_pw}</code>', 'info')
+    return redirect(url_for('admin_panel', tab='users'))
+
+
+@app.route('/admin/users/<int:uid>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def admin_toggle_user(uid):
+    u = User.query.get_or_404(uid)
+    if u.id == current_user.id:
+        flash('You cannot block your own account.', 'warning')
+        return redirect(url_for('admin_panel', tab='users'))
+    u.is_active = not u.is_active
+    db.session.commit()
+    state = 'unblocked' if u.is_active else 'blocked'
+    flash(f'User {u.full_name} {state}.', 'success')
+    return redirect(url_for('admin_panel', tab='users'))
+
+
+@app.route('/admin/users/<int:uid>/transfer', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_transfer_warranties(uid):
+    from_user = User.query.get_or_404(uid)
+    open_statuses = [WarrantyStatus.OPEN, WarrantyStatus.WORKSHOP, WarrantyStatus.ENGINEERING]
+    warranties = (Warranty.query
+                  .filter(Warranty.created_by_id == from_user.id,
+                          Warranty.status.in_(open_statuses))
+                  .order_by(Warranty.warranty_number).all())
+    other_users = (User.query
+                   .filter(User.id != from_user.id, User.is_active == True)
+                   .order_by(User.last_name, User.first_name).all())
+
+    if request.method == 'POST':
+        to_user_id = int(request.form['to_user_id'])
+        to_user    = User.query.get_or_404(to_user_id)
+        selected   = request.form.getlist('warranty_ids')
+        if not selected:
+            flash('No warranties selected.', 'warning')
+            return redirect(url_for('admin_transfer_warranties', uid=uid))
+        count = 0
+        for wid in selected:
+            w = Warranty.query.get(int(wid))
+            if w and w.created_by_id == from_user.id:
+                w.created_by_id = to_user.id
+                if from_user in w.engineers:
+                    w.engineers.remove(from_user)
+                    if to_user not in w.engineers:
+                        w.engineers.append(to_user)
+                count += 1
+        db.session.commit()
+        flash(f'{count} warrant(ies) transferred to {to_user.full_name}.', 'success')
+        return redirect(url_for('admin_panel', tab='users'))
+
+    return render_template('admin_transfer.html',
+                           from_user=from_user,
+                           warranties=warranties,
+                           other_users=other_users)
+
+
+@app.route('/admin/customers/new', methods=['POST'])
+@login_required
+@admin_required
+def admin_customer_new():
+    code = request.form['code'].strip().upper()
+    if Customer.query.filter_by(code=code).first():
+        flash(f'Customer code "{code}" already exists.', 'danger')
+        return redirect(url_for('admin_panel', tab='customers'))
+    c = Customer(name=request.form['name'].strip(), code=code,
+                 contact_email=request.form.get('contact_email', '').strip() or None,
+                 country=request.form.get('country', '').strip() or None)
+    db.session.add(c)
+    db.session.commit()
+    flash(f'Customer {c.name} ({c.code}) created.', 'success')
+    return redirect(url_for('admin_panel', tab='customers'))
+
+
+@app.route('/admin/customers/<int:cid>/edit', methods=['POST'])
+@login_required
+@admin_required
+def admin_customer_edit(cid):
+    c = Customer.query.get_or_404(cid)
+    new_code = request.form['code'].strip().upper()
+    conflict = Customer.query.filter(Customer.code == new_code, Customer.id != cid).first()
+    if conflict:
+        flash(f'Code "{new_code}" already in use.', 'danger')
+        return redirect(url_for('admin_panel', tab='customers'))
+    c.name          = request.form['name'].strip()
+    c.code          = new_code
+    c.contact_email = request.form.get('contact_email', '').strip() or None
+    c.country       = request.form.get('country', '').strip() or None
+    db.session.commit()
+    flash(f'Customer {c.name} updated.', 'success')
+    return redirect(url_for('admin_panel', tab='customers'))
+
+
+@app.route('/admin/customers/<int:cid>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def admin_toggle_customer(cid):
+    c = Customer.query.get_or_404(cid)
+    c.is_active = not c.is_active
+    db.session.commit()
+    state = 'activated' if c.is_active else 'deactivated'
+    flash(f'Customer {c.name} {state}.', 'success')
+    return redirect(url_for('admin_panel', tab='customers'))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI — DATABASE INIT & SEED

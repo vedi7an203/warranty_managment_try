@@ -1,0 +1,457 @@
+{% extends 'base.html' %}
+{% block title %}Admin Panel — WAM{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <h4 class="mb-0">
+    <i class="fa-solid fa-shield-halved me-2" style="color:var(--wam-accent)"></i>Admin Panel
+  </h4>
+</div>
+
+<!-- ── Tabs ── -->
+<ul class="nav nav-tabs mb-0" id="adminTabs">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'users' %}active{% endif %}"
+       href="{{ url_for('admin_panel', tab='users') }}">
+      <i class="fa-solid fa-users me-1"></i>Users
+      <span class="badge bg-secondary ms-1">{{ users|length }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'customers' %}active{% endif %}"
+       href="{{ url_for('admin_panel', tab='customers') }}">
+      <i class="fa-solid fa-building me-1"></i>Customers
+      <span class="badge bg-secondary ms-1">{{ customers|length }}</span>
+    </a>
+  </li>
+</ul>
+
+<!-- ══════════════════════════════ USERS TAB ══════════════════════════════ -->
+{% if tab == 'users' %}
+<div class="card border-top-0 rounded-top-0">
+  <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
+    <input type="text" id="userSearch" class="form-control form-control-sm"
+           placeholder="&#128269; Search users…" style="max-width:260px"
+           autofocus>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+      <i class="fa-solid fa-user-plus me-1"></i>Add User
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" id="usersTable">
+      <thead class="table-light small text-uppercase text-muted">
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th class="text-center">Warranties</th>
+          <th class="text-center">Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr class="{% if not u.is_active %}table-secondary{% endif %}">
+          <td><strong>{{ u.full_name }}</strong></td>
+          <td><code class="small">{{ u.username }}</code></td>
+          <td class="small">{{ u.email }}</td>
+          <td>
+            {% if u.role == 'admin' %}
+              <span class="badge bg-danger">Admin</span>
+            {% elif u.role == 'engineer' %}
+              <span class="badge bg-primary">Engineer</span>
+            {% else %}
+              <span class="badge bg-secondary">Viewer</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <span class="badge bg-light text-dark border">{{ u.warranties_created|length }}</span>
+          </td>
+          <td class="text-center">
+            {% if u.is_active %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-danger">Blocked</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              {# Edit #}
+              <button class="btn btn-outline-secondary" title="Edit user"
+                      data-bs-toggle="modal" data-bs-target="#editUserModal"
+                      data-uid="{{ u.id }}"
+                      data-firstname="{{ u.first_name }}"
+                      data-lastname="{{ u.last_name }}"
+                      data-email="{{ u.email }}"
+                      data-role="{{ u.role }}">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              {# Reset password #}
+              <button class="btn btn-outline-info" title="Reset password"
+                      data-bs-toggle="modal" data-bs-target="#resetPwModal"
+                      data-uid="{{ u.id }}" data-name="{{ u.full_name }}">
+                <i class="fa-solid fa-key"></i>
+              </button>
+              {% if u.id != current_user.id %}
+              {# Block / Unblock #}
+              <form method="post" action="{{ url_for('admin_toggle_user', uid=u.id) }}" class="d-inline">
+                <button class="btn btn-outline-{{ 'success' if not u.is_active else 'warning' }}"
+                        title="{{ 'Unblock' if not u.is_active else 'Block' }}"
+                        onclick="return confirm('{{ 'Unblock' if not u.is_active else 'Block' }} {{ u.full_name }}?')">
+                  <i class="fa-solid fa-{{ 'lock-open' if not u.is_active else 'lock' }}"></i>
+                </button>
+              </form>
+              {# Transfer warranties #}
+              <a href="{{ url_for('admin_transfer_warranties', uid=u.id) }}"
+                 class="btn btn-outline-primary" title="Transfer warranties">
+                <i class="fa-solid fa-arrow-right-arrow-left"></i>
+              </a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Add User Modal ── -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('admin_user_new') }}">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-user-plus me-2"></i>New User</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small mb-1">First Name</label>
+              <input name="first_name" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">Last Name</label>
+              <input name="last_name" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">Username</label>
+              <input name="username" class="form-control form-control-sm" required
+                     pattern="[a-z0-9._]+" title="Lowercase letters, digits, dots, underscores">
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">Role</label>
+              <select name="role" class="form-select form-select-sm">
+                <option value="engineer" selected>Engineer</option>
+                <option value="admin">Admin</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Email</label>
+              <input name="email" type="email" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Password</label>
+              <input name="password" type="password" class="form-control form-control-sm"
+                     required minlength="6" placeholder="Min. 6 characters">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-plus me-1"></i>Create
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Edit User Modal ── -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" id="editUserForm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-pen me-2"></i>Edit User</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small mb-1">First Name</label>
+              <input name="first_name" id="eu_first" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">Last Name</label>
+              <input name="last_name" id="eu_last" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Email</label>
+              <input name="email" id="eu_email" type="email" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Role</label>
+              <select name="role" id="eu_role" class="form-select form-select-sm">
+                <option value="engineer">Engineer</option>
+                <option value="admin">Admin</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-floppy-disk me-1"></i>Save
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Reset Password Modal ── -->
+<div class="modal fade" id="resetPwModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <form method="post" id="resetPwForm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-key me-2"></i>Reset Password</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small mb-2">For: <strong id="rp_name"></strong></p>
+          <label class="form-label small mb-1">
+            New Password
+            <span class="text-muted">(blank = auto-generate)</span>
+          </label>
+          <input name="new_password" type="text" class="form-control form-control-sm"
+                 placeholder="Leave blank to auto-generate">
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info btn-sm text-white">
+            <i class="fa-solid fa-key me-1"></i>Reset
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}{# /users tab #}
+
+
+<!-- ══════════════════════════════ CUSTOMERS TAB ══════════════════════════════ -->
+{% if tab == 'customers' %}
+<div class="card border-top-0 rounded-top-0">
+  <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
+    <input type="text" id="customerSearch" class="form-control form-control-sm"
+           placeholder="&#128269; Search customers…" style="max-width:260px"
+           autofocus>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+      <i class="fa-solid fa-plus me-1"></i>Add Customer
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" id="customersTable">
+      <thead class="table-light small text-uppercase text-muted">
+        <tr>
+          <th>Company Name</th>
+          <th>Code</th>
+          <th>Contact Email</th>
+          <th>Country</th>
+          <th class="text-center">Warranties</th>
+          <th class="text-center">Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in customers %}
+        <tr class="{% if not c.is_active %}table-secondary{% endif %}">
+          <td><strong>{{ c.name }}</strong></td>
+          <td><code class="small">{{ c.code }}</code></td>
+          <td class="small">{{ c.contact_email or '—' }}</td>
+          <td class="small">{{ c.country or '—' }}</td>
+          <td class="text-center">
+            <span class="badge bg-light text-dark border">{{ c.warranties.count() }}</span>
+          </td>
+          <td class="text-center">
+            {% if c.is_active %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" title="Edit customer"
+                      data-bs-toggle="modal" data-bs-target="#editCustomerModal"
+                      data-cid="{{ c.id }}"
+                      data-name="{{ c.name }}"
+                      data-code="{{ c.code }}"
+                      data-email="{{ c.contact_email or '' }}"
+                      data-country="{{ c.country or '' }}">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <form method="post" action="{{ url_for('admin_toggle_customer', cid=c.id) }}" class="d-inline">
+                <button class="btn btn-outline-{{ 'success' if not c.is_active else 'secondary' }}"
+                        title="{{ 'Activate' if not c.is_active else 'Deactivate' }}"
+                        onclick="return confirm('{{ 'Activate' if not c.is_active else 'Deactivate' }} {{ c.name }}?')">
+                  <i class="fa-solid fa-{{ 'circle-check' if not c.is_active else 'circle-xmark' }}"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Add Customer Modal ── -->
+<div class="modal fade" id="addCustomerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('admin_customer_new') }}">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-building-circle-check me-2"></i>New Customer</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-8">
+              <label class="form-label small mb-1">Company Name</label>
+              <input name="name" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-4">
+              <label class="form-label small mb-1">Code</label>
+              <input name="code" class="form-control form-control-sm" required
+                     placeholder="e.g. AIR01" style="text-transform:uppercase">
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Contact Email</label>
+              <input name="contact_email" type="email" class="form-control form-control-sm">
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Country</label>
+              <input name="country" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-plus me-1"></i>Create
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Edit Customer Modal ── -->
+<div class="modal fade" id="editCustomerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" id="editCustomerForm">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-pen me-2"></i>Edit Customer</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-8">
+              <label class="form-label small mb-1">Company Name</label>
+              <input name="name" id="ec_name" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-4">
+              <label class="form-label small mb-1">Code</label>
+              <input name="code" id="ec_code" class="form-control form-control-sm" required
+                     style="text-transform:uppercase">
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Contact Email</label>
+              <input name="contact_email" id="ec_email" type="email" class="form-control form-control-sm">
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Country</label>
+              <input name="country" id="ec_country" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-floppy-disk me-1"></i>Save
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}{# /customers tab #}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Live search ──
+function liveSearch(inputId, tableId) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.addEventListener('input', function () {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#' + tableId + ' tbody tr').forEach(function (tr) {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+}
+liveSearch('userSearch', 'usersTable');
+liveSearch('customerSearch', 'customersTable');
+
+// ── Edit User modal ──
+const editUserModal = document.getElementById('editUserModal');
+if (editUserModal) {
+  editUserModal.addEventListener('show.bs.modal', function (e) {
+    const b = e.relatedTarget;
+    document.getElementById('editUserForm').action = '/admin/users/' + b.dataset.uid + '/edit';
+    document.getElementById('eu_first').value = b.dataset.firstname;
+    document.getElementById('eu_last').value  = b.dataset.lastname;
+    document.getElementById('eu_email').value = b.dataset.email;
+    document.getElementById('eu_role').value  = b.dataset.role;
+  });
+}
+
+// ── Reset Password modal ──
+const resetPwModal = document.getElementById('resetPwModal');
+if (resetPwModal) {
+  resetPwModal.addEventListener('show.bs.modal', function (e) {
+    const b = e.relatedTarget;
+    document.getElementById('resetPwForm').action = '/admin/users/' + b.dataset.uid + '/reset-password';
+    document.getElementById('rp_name').textContent = b.dataset.name;
+    resetPwModal.querySelector('input[name=new_password]').value = '';
+  });
+}
+
+// ── Edit Customer modal ──
+const editCustomerModal = document.getElementById('editCustomerModal');
+if (editCustomerModal) {
+  editCustomerModal.addEventListener('show.bs.modal', function (e) {
+    const b = e.relatedTarget;
+    document.getElementById('editCustomerForm').action = '/admin/customers/' + b.dataset.cid + '/edit';
+    document.getElementById('ec_name').value    = b.dataset.name;
+    document.getElementById('ec_code').value    = b.dataset.code;
+    document.getElementById('ec_email').value   = b.dataset.email;
+    document.getElementById('ec_country').value = b.dataset.country;
+  });
+}
+</script>
+{% endblock %}
