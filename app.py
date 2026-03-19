@@ -59,6 +59,22 @@ def _init_db():
     """Create tables and seed reference data (called at startup and via CLI)."""
     db.create_all()
 
+    # Add columns introduced after initial deployment (safe if already present)
+    with db.engine.connect() as conn:
+        for col, col_type in [
+            ('technical_report_filename', 'VARCHAR(255)'),
+            ('technical_report_stored',   'VARCHAR(255)'),
+        ]:
+            exists = conn.execute(db.text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='warranty' AND column_name=:col"
+            ), {'col': col}).fetchone()
+            if not exists:
+                conn.execute(db.text(
+                    f'ALTER TABLE warranty ADD COLUMN {col} {col_type}'
+                ))
+        conn.commit()
+
     if not User.query.filter_by(username='admin').first():
         admin = User(username='admin', email='admin@mro.aero',
                      first_name='Admin', last_name='User', role='admin')
