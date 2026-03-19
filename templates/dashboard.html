@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — WAM{% endblock %}
 
+{% block head %}
+<!-- Tom Select -->
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet"/>
+<style>
+  .ts-wrapper.multi .ts-control { min-height: 31px; padding: 2px 6px; }
+  .ts-wrapper .ts-control { font-size: .8125rem; }
+  .ts-dropdown { font-size: .8125rem; }
+  .engineer-cell { cursor: pointer; }
+  .engineer-edit-btn { opacity: 0; transition: opacity .15s; cursor: pointer; }
+  tr:hover .engineer-edit-btn { opacity: 1; }
+  .adj-time-badge { font-size: .75rem; white-space: nowrap; }
+  .occ-badge { font-size: .7rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- ────────────────────────  KPI CARDS  ──────────────────────── -->
 <div class="row g-3 mb-4">
@@ -16,9 +31,7 @@
     <a href="{{ href }}" class="text-decoration-none">
       <div class="card kpi-card {{ cls }} h-100">
         <div class="card-body d-flex align-items-center gap-3">
-          <div class="kpi-icon">
-            <i class="fa-solid {{ icon }}"></i>
-          </div>
+          <div class="kpi-icon"><i class="fa-solid {{ icon }}"></i></div>
           <div>
             <div class="kpi-value">{{ count }}</div>
             <div class="kpi-label">{{ label }}</div>
@@ -48,20 +61,18 @@
 
         <div class="col-6 col-md-2 col-xl-2">
           <label class="filter-label">Status</label>
-          <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">All statuses</option>
+          <select name="status" id="statusFilter" multiple placeholder="All">
             {% for val, lbl in WarrantyStatus.CHOICES %}
-            <option value="{{ val }}" {{ 'selected' if filters.status == val }}>{{ lbl }}</option>
+            <option value="{{ val }}" {{ 'selected' if val in filters.status }}>{{ lbl }}</option>
             {% endfor %}
           </select>
         </div>
 
         <div class="col-6 col-md-2 col-xl-2">
           <label class="filter-label">Customer</label>
-          <select name="customer" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">All customers</option>
+          <select name="customer" id="customerFilter" multiple placeholder="All">
             {% for c in customers %}
-            <option value="{{ c.id }}" {{ 'selected' if filters.customer == c.id|string }}>
+            <option value="{{ c.id }}" {{ 'selected' if c.id|string in filters.customer }}>
               {{ c.name }}
             </option>
             {% endfor %}
@@ -71,7 +82,7 @@
         <div class="col-6 col-md-2 col-xl-2">
           <label class="filter-label">Engineer</label>
           <select name="engineer" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">All engineers</option>
+            <option value="">All</option>
             {% for e in engineers %}
             <option value="{{ e.id }}" {{ 'selected' if filters.engineer == e.id|string }}>
               {{ e.full_name }}
@@ -82,8 +93,11 @@
 
         <div class="col-6 col-md-2 col-xl-2">
           <label class="filter-label">Part Number</label>
-          <input type="text" name="pn" class="form-control form-control-sm"
-                 placeholder="Filter P/N…" value="{{ filters.pn }}"/>
+          <select name="pn" id="pnFilter" multiple placeholder="All">
+            {% for pn in all_part_numbers %}
+            <option value="{{ pn }}" {{ 'selected' if pn in filters.pn }}>{{ pn }}</option>
+            {% endfor %}
+          </select>
         </div>
 
         <div class="col-6 col-md-1 col-xl-1">
@@ -114,9 +128,14 @@
   <span class="text-muted small">
     <strong>{{ warranties|length }}</strong> warrant{{ 'y' if warranties|length == 1 else 'ies' }} found
   </span>
-  <a href="{{ url_for('warranty_new') }}" class="btn btn-success btn-sm">
-    <i class="fa-solid fa-plus me-1"></i>New Warranty
-  </a>
+  <div class="d-flex gap-2">
+    <button id="downloadBtn" class="btn btn-outline-success btn-sm" type="button">
+      <i class="fa-solid fa-file-excel me-1"></i>Download
+    </button>
+    <a href="{{ url_for('warranty_new') }}" class="btn btn-success btn-sm">
+      <i class="fa-solid fa-plus me-1"></i>New Warranty
+    </a>
+  </div>
 </div>
 
 <!-- ────────────────────────  TABLE  ──────────────────────── -->
@@ -134,9 +153,9 @@
           <th>Observed Defect</th>
           <th class="text-end">TSI&nbsp;/&nbsp;TSO</th>
           <th>Adj. Start</th>
+          <th>Adj. Time</th>
           <th>Engineers</th>
           <th>Updated</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -145,26 +164,24 @@
 
           <td>
             <span class="fw-bold font-monospace wnum">{{ w.warranty_number }}</span>
-            {% if w.previous_warranty_count > 0 %}
-            <span class="badge bg-warning text-dark ms-1 small"
-                  title="{{ w.previous_warranty_count }} previous warranty(ies) for this S/N">
-              <i class="fa-solid fa-rotate-left"></i>{{ w.previous_warranty_count }}
+            {% if w.total_occurrence_count > 1 %}
+            <span class="badge bg-warning text-dark ms-1 occ-badge"
+                  title="This unit has {{ w.total_occurrence_count }} total warranty(ies) for P/N {{ w.lru_part_number }} / S/N {{ w.lru_serial_number }}">
+              <i class="fa-solid fa-rotate-left"></i>{{ w.total_occurrence_count }}
             </span>
             {% endif %}
           </td>
 
           <td>
             <span class="badge status-badge bg-{{ w.status_color }}">
-              {{ w.effective_status_label }}
+              {{ w.short_status_label }}
             </span>
           </td>
 
           <td class="font-monospace small">{{ w.lru_part_number }}</td>
           <td class="font-monospace small">{{ w.lru_serial_number }}</td>
 
-          <td class="small">
-            {{ w.customer.name if w.customer else '—' }}
-          </td>
+          <td class="small">{{ w.customer.name if w.customer else '—' }}</td>
 
           <td class="defect-cell small text-muted">
             {{ w.observed_defect[:80] }}{{ '…' if w.observed_defect|length > 80 }}
@@ -177,25 +194,40 @@
 
           <td class="small">{{ w.adjudication_start_date|fdate }}</td>
 
-          <td>
-            <div class="d-flex flex-wrap gap-1">
-              {% for eng in w.engineers[:3] %}
-              <span class="avatar-xs" title="{{ eng.full_name }}">{{ eng.initials }}</span>
-              {% endfor %}
-              {% if w.engineers|length > 3 %}
-              <span class="avatar-xs text-muted">+{{ w.engineers|length - 3 }}</span>
+          <td class="small">
+            {% if w.adjudication_days is not none %}
+              {% if w.status == WarrantyStatus.CLOSED %}
+                <span class="adj-time-badge text-muted">{{ w.adjudication_days }}d</span>
+              {% elif w.adjudication_days > 60 %}
+                <span class="adj-time-badge badge bg-danger">{{ w.adjudication_days }}d</span>
+              {% elif w.adjudication_days > 30 %}
+                <span class="adj-time-badge badge bg-warning text-dark">{{ w.adjudication_days }}d</span>
+              {% else %}
+                <span class="adj-time-badge badge bg-success">{{ w.adjudication_days }}d</span>
               {% endif %}
+            {% else %}—{% endif %}
+          </td>
+
+          <td onclick="event.stopPropagation()">
+            <div class="d-flex align-items-center gap-1">
+              <div class="d-flex flex-wrap gap-1" id="eng-avatars-{{ w.id }}">
+                {% for eng in w.engineers[:3] %}
+                <span class="avatar-xs" title="{{ eng.full_name }}">{{ eng.initials }}</span>
+                {% endfor %}
+                {% if w.engineers|length > 3 %}
+                <span class="avatar-xs text-muted">+{{ w.engineers|length - 3 }}</span>
+                {% endif %}
+              </div>
+              <button type="button"
+                      class="btn btn-xs btn-outline-secondary engineer-edit-btn ms-1"
+                      title="Edit engineers"
+                      onclick="openEngineerModal({{ w.id }}, {{ w.engineers | map(attribute='id') | list | tojson }})"
+              ><i class="fa-solid fa-pen fa-xs"></i></button>
             </div>
           </td>
 
           <td class="small text-muted">{{ w.updated_at|fdate }}</td>
 
-          <td onclick="event.stopPropagation()">
-            <a href="{{ url_for('warranty_detail', warranty_id=w.id) }}"
-               class="btn btn-xs btn-outline-primary">
-              <i class="fa-solid fa-eye"></i>
-            </a>
-          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -212,4 +244,125 @@
   </p>
 </div>
 {% endif %}
+
+<!-- ────────────────────────  ENGINEER MODAL  ──────────────────────── -->
+<div class="modal fade" id="engineerModal" tabindex="-1" aria-labelledby="engineerModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title mb-0" id="engineerModalLabel">
+          <i class="fa-solid fa-users me-1"></i>Assign Engineers
+        </h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-2" id="engineerModalBody">
+        {% for e in engineers %}
+        <div class="form-check">
+          <input class="form-check-input eng-checkbox" type="checkbox"
+                 value="{{ e.id }}" id="eng-{{ e.id }}">
+          <label class="form-check-label small" for="eng-{{ e.id }}">
+            <span class="avatar-xs me-1">{{ e.initials }}</span>{{ e.full_name }}
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="modal-footer py-1 px-3">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="engineerSaveBtn">
+          <i class="fa-solid fa-check me-1"></i>Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+// ── Tom Select for multi-value filters
+['statusFilter', 'customerFilter', 'pnFilter'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  new TomSelect(el, {
+    plugins: ['remove_button', 'checkbox_options'],
+    allowEmptyOption: false,
+    closeAfterSelect: false,
+    hideSelected: false,
+    render: {
+      option: function(data, escape) {
+        return '<div class="d-flex align-items-center gap-2">' +
+               '<span>' + escape(data.text) + '</span></div>';
+      }
+    }
+  });
+});
+
+// ── Download button — build URL from current form state
+document.getElementById('downloadBtn').addEventListener('click', function() {
+  var form   = document.getElementById('filterForm');
+  var params = new URLSearchParams();
+
+  // Collect standard inputs
+  ['search', 'engineer', 'sort'].forEach(function(name) {
+    var el = form.elements[name];
+    if (el && el.value) params.append(name, el.value);
+  });
+
+  // Collect Tom Select multi-values (status, customer, pn)
+  ['status', 'customer', 'pn'].forEach(function(name) {
+    var selects = form.querySelectorAll('select[name="' + name + '"]');
+    selects.forEach(function(sel) {
+      Array.from(sel.selectedOptions).forEach(function(opt) {
+        if (opt.value) params.append(name, opt.value);
+      });
+    });
+  });
+
+  window.location = '{{ url_for("dashboard_download") }}?' + params.toString();
+});
+
+// ── Engineer inline edit modal
+var currentWarrantyId = null;
+var engineerModal = new bootstrap.Modal(document.getElementById('engineerModal'));
+
+function openEngineerModal(warrantyId, currentEngIds) {
+  currentWarrantyId = warrantyId;
+  document.querySelectorAll('.eng-checkbox').forEach(function(cb) {
+    cb.checked = currentEngIds.indexOf(parseInt(cb.value)) !== -1;
+  });
+  engineerModal.show();
+}
+
+document.getElementById('engineerSaveBtn').addEventListener('click', function() {
+  var ids = Array.from(document.querySelectorAll('.eng-checkbox:checked'))
+                 .map(function(cb) { return cb.value; });
+
+  var formData = new FormData();
+  ids.forEach(function(id) { formData.append('engineer_ids', id); });
+
+  fetch('/api/warranty/' + currentWarrantyId + '/set-engineers', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      var container = document.getElementById('eng-avatars-' + currentWarrantyId);
+      if (container) {
+        var shown = data.engineers.slice(0, 3);
+        var extra = data.engineers.length - 3;
+        var html  = shown.map(function(e) {
+          return '<span class="avatar-xs" title="' + e.name + '">' + e.initials + '</span>';
+        }).join('');
+        if (extra > 0) html += '<span class="avatar-xs text-muted">+' + extra + '</span>';
+        container.innerHTML = html;
+      }
+      engineerModal.hide();
+    }
+  })
+  .catch(function(err) { console.error(err); });
+});
+</script>
 {% endblock %}
