@@ -70,13 +70,17 @@
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label required-label">Current MCO</label>
-            <input type="text" name="current_mco" class="form-control text-uppercase"
-                   value="{{ w.current_mco }}" required/>
+            <input type="text" name="current_mco" class="form-control font-monospace"
+                   value="{{ w.current_mco }}" pattern="\d{10}"
+                   title="10-digit number starting with 5000" required maxlength="10"/>
+            <div class="form-text">10 digits starting with 5000</div>
           </div>
           <div class="col-md-6">
-            <label class="form-label">Former MCO</label>
-            <input type="text" name="former_mco" class="form-control text-uppercase"
-                   value="{{ w.former_mco or '' }}"/>
+            <label class="form-label required-label">Former MCO</label>
+            <input type="text" name="former_mco" class="form-control font-monospace"
+                   value="{{ w.former_mco or '' }}" pattern="\d{10}"
+                   title="10-digit number starting with 5000" required maxlength="10"/>
+            <div class="form-text">10 digits starting with 5000</div>
           </div>
           <div class="col-md-6">
             <label class="form-label">Former ARC Date</label>
