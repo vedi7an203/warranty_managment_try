@@ -311,11 +311,12 @@ class Warranty(db.Model):
                 .count())
 
     @property
-    def total_occurrence_count(self):
-        """Total warranties for same P/N + S/N including this one."""
+    def occurrence_number(self):
+        """Chronological rank of this warranty for same P/N + S/N (1 = first time seen)."""
         return (Warranty.query
                 .filter(Warranty.lru_part_number == self.lru_part_number,
-                        Warranty.lru_serial_number == self.lru_serial_number)
+                        Warranty.lru_serial_number == self.lru_serial_number,
+                        Warranty.id <= self.id)
                 .count())
 
     @property
