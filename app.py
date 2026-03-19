@@ -281,7 +281,7 @@ class Warranty(db.Model):
     engineers  = db.relationship('User', secondary=warranty_engineers,
                                  backref=db.backref('assigned_warranties', lazy='dynamic'))
     activities = db.relationship('WarrantyActivity', backref='warranty',
-                                 lazy='dynamic', order_by='WarrantyActivity.timestamp')
+                                 lazy='dynamic')
 
     # ── Helpers
     @staticmethod
@@ -326,6 +326,14 @@ class Warranty(db.Model):
                 .filter(Warranty.lru_serial_number == self.lru_serial_number,
                         Warranty.id != self.id)
                 .order_by(Warranty.created_at.desc())
+                .all())
+
+    @property
+    def all_unit_warranties(self):
+        """All warranties for this serial number (including current), oldest first."""
+        return (Warranty.query
+                .filter(Warranty.lru_serial_number == self.lru_serial_number)
+                .order_by(Warranty.created_at.asc())
                 .all())
 
     @property
@@ -707,6 +715,7 @@ def warranty_detail(warranty_id):
         activities=activities,
         all_engineers=User.query.filter_by(is_active=True).order_by(User.last_name).all(),
         previous_warranties=w.previous_warranties,
+        all_unit_warranties=w.all_unit_warranties,
     )
 
 # ─────────────────────────────────────────────────────────────────────────────

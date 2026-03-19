@@ -343,44 +343,65 @@
     <div class="card info-card mb-3">
       <div class="card-header info-header d-flex align-items-center gap-2">
         <i class="fa-solid fa-rotate-left text-warning"></i>
-        Previous Warranty History
+        Warranty History
         <span class="badge {{ 'bg-warning text-dark' if previous_warranties else 'bg-secondary' }} ms-auto">
-          {{ previous_warranties|length }}
+          {{ previous_warranties|length }} previous
         </span>
       </div>
       <div class="card-body">
-        {% if previous_warranties %}
+        {% if all_unit_warranties|length > 1 %}
         <p class="small text-muted mb-2">
-          Unit <strong>{{ w.lru_serial_number }}</strong> has been under
-          warranty <strong>{{ previous_warranties|length }}</strong>
-          previous time{{ 's' if previous_warranties|length != 1 }}.
+          Unit <strong>{{ w.lru_serial_number }}</strong> —
+          <strong>{{ all_unit_warranties|length }}</strong> total occurrence{{ 's' if all_unit_warranties|length != 1 }}
         </p>
+        {% endif %}
         <div class="d-flex flex-column gap-2">
-          {% for pw in previous_warranties %}
-          <a href="{{ url_for('warranty_detail', warranty_id=pw.id) }}"
+          {% for uw in all_unit_warranties %}
+          {% if uw.id == w.id %}
+          <!-- Current warranty — highlighted -->
+          <div class="prev-warranty-item prev-warranty-current">
+            <div class="d-flex justify-content-between align-items-start">
+              <span class="font-monospace small fw-bold">{{ uw.warranty_number }}</span>
+              <span class="badge bg-primary small ms-1">
+                <i class="fa-solid fa-location-dot me-1"></i>This warranty
+              </span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-1">
+              <div class="text-muted tiny">
+                {{ uw.adjudication_start_date|fdate }} &bull; {{ uw.customer.name if uw.customer }}
+              </div>
+              <span class="badge bg-{{ uw.status_color }} small">{{ uw.effective_status_label }}</span>
+            </div>
+            <div class="text-muted tiny mt-1">
+              {{ uw.observed_defect[:60] }}{{ '…' if uw.observed_defect|length > 60 }}
+            </div>
+          </div>
+          {% else %}
+          <!-- Other warranty — clickable -->
+          <a href="{{ url_for('warranty_detail', warranty_id=uw.id) }}"
              class="prev-warranty-item text-decoration-none">
             <div class="d-flex justify-content-between align-items-start">
-              <span class="font-monospace small fw-bold">{{ pw.warranty_number }}</span>
-              <span class="badge bg-{{ pw.status_color }} small">
-                {{ pw.effective_status_label }}
+              <span class="font-monospace small fw-bold">{{ uw.warranty_number }}</span>
+              <span class="badge bg-{{ uw.status_color }} small">
+                {{ uw.effective_status_label }}
               </span>
             </div>
             <div class="text-muted tiny mt-1">
-              {{ pw.adjudication_start_date|fdate }} &bull; {{ pw.customer.name if pw.customer }}
+              {{ uw.adjudication_start_date|fdate }} &bull; {{ uw.customer.name if uw.customer }}
             </div>
             <div class="text-muted tiny">
-              {{ pw.observed_defect[:60] }}{{ '…' if pw.observed_defect|length > 60 }}
+              {{ uw.observed_defect[:60] }}{{ '…' if uw.observed_defect|length > 60 }}
             </div>
           </a>
+          {% endif %}
+          {% else %}
+          <div class="text-center py-3">
+            <i class="fa-solid fa-circle-check fa-2x text-success mb-2 d-block"></i>
+            <p class="text-muted small mb-0">First warranty for this unit.</p>
+            <p class="text-muted tiny">S/N {{ w.lru_serial_number }}</p>
+          </div>
           {% endfor %}
         </div>
-        {% else %}
-        <div class="text-center py-3">
-          <i class="fa-solid fa-circle-check fa-2x text-success mb-2 d-block"></i>
-          <p class="text-muted small mb-0">First warranty for this unit.</p>
-          <p class="text-muted tiny">S/N {{ w.lru_serial_number }}</p>
-        </div>
-        {% endif %}
       </div>
     </div>
 
