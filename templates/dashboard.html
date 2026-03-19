@@ -146,6 +146,7 @@
         <tr>
           <th>Warranty #</th>
           <th>Status</th>
+          <th class="text-center" title="Technical Report"><i class="fa-solid fa-file-lines"></i></th>
           <th>LRU Part Number</th>
           <th>Serial Number</th>
           <th>Customer</th>
@@ -175,6 +176,22 @@
             <span class="badge status-badge bg-{{ w.status_color }}">
               {{ w.short_status_label }}
             </span>
+          </td>
+
+          <td class="text-center" onclick="event.stopPropagation()">
+            {% if w.technical_report_filename %}
+            {% set rext = w.technical_report_filename.rsplit('.', 1)[-1].lower() %}
+            <a href="{{ url_for('download_report', warranty_id=w.id) }}"
+               title="{{ w.technical_report_filename }}" class="text-decoration-none">
+              {% if rext == 'pdf' %}
+              <i class="fa-solid fa-file-pdf text-danger"></i>
+              {% else %}
+              <i class="fa-solid fa-file-word text-primary"></i>
+              {% endif %}
+            </a>
+            {% else %}
+            <span class="text-muted opacity-25"><i class="fa-solid fa-file-lines"></i></span>
+            {% endif %}
           </td>
 
           <td class="font-monospace small">{{ w.lru_part_number }}</td>

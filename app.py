@@ -19,6 +19,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
                          login_required, current_user)
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 # ─────────────────────────────────────────────────────────────────────────────
 # APP CONFIGURATION
@@ -43,6 +44,9 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,
     'pool_recycle': 300,
 }
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'reports')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_REPORT_EXTENSIONS = {'pdf', 'doc', 'docx'}
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -221,8 +225,8 @@ class Warranty(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
 
     # ── MCO (Maintenance/Check Order) information
-    current_mco = db.Column(db.String(50), nullable=False)   # where unit is under investigation
-    former_mco  = db.Column(db.String(50))                   # where unit was previously repaired
+    current_mco = db.Column(db.String(10), nullable=False)   # 10-digit MCO starting with 5000
+    former_mco  = db.Column(db.String(10), nullable=False)   # 10-digit MCO starting with 5000
 
     # ── Dates
     former_arc_date         = db.Column(db.Date)             # former Authorised Release Certificate
@@ -239,6 +243,10 @@ class Warranty(db.Model):
     tsi                              = db.Column(db.Float)    # Time Since Installation
     tso                              = db.Column(db.Float)    # Time Since Overhaul
     flight_cycles_since_installation = db.Column(db.Integer)
+
+    # ── Technical Report
+    technical_report_filename = db.Column(db.String(255))  # original filename
+    technical_report_stored   = db.Column(db.String(255))  # stored file on disk
 
     # ── Warranty status
     status            = db.Column(db.String(30), nullable=False, default=WarrantyStatus.OPEN)
@@ -346,6 +354,20 @@ class Warranty(db.Model):
         return f'<Warranty {self.warranty_number}>'
 
 
+class LRUPart(db.Model):
+    """Reference table of known LRU Part Numbers with ATA and description."""
+    __tablename__ = 'lru_part'
+    id          = db.Column(db.Integer, primary_key=True)
+    part_number = db.Column(db.String(50), unique=True, nullable=False)
+    ata_chapter = db.Column(db.String(20))
+    description = db.Column(db.String(200), nullable=False)
+    is_active   = db.Column(db.Boolean, default=True)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<LRUPart {self.part_number}>'
+
+
 class WarrantyActivity(db.Model):
     id            = db.Column(db.Integer, primary_key=True)
     warranty_id   = db.Column(db.Integer, db.ForeignKey('warranty.id'), nullable=False)
@@ -436,6 +458,16 @@ def log_activity(warranty, activity_type, comment=None, old_value=None, new_valu
 
 def parse_date(s):
     return datetime.strptime(s, '%Y-%m-%d').date() if s else None
+
+def validate_mco(mco_str):
+    """MCO must be a 10-digit number starting with 5000 (e.g. 5000457741)."""
+    if not mco_str:
+        return False
+    cleaned = mco_str.strip()
+    return cleaned.isdigit() and len(cleaned) == 10 and cleaned.startswith('5000')
+
+def allowed_report_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPORT_EXTENSIONS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AUTH ROUTES
@@ -545,14 +577,24 @@ def warranty_new():
 
     if request.method == 'POST':
         try:
+            current_mco_raw = request.form.get('current_mco', '').strip()
+            former_mco_raw  = request.form.get('former_mco', '').strip()
+            if not validate_mco(current_mco_raw):
+                flash('Current MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_new.html', customers=customers,
+                                       engineers=engineers, today=date.today().isoformat())
+            if not validate_mco(former_mco_raw):
+                flash('Former MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_new.html', customers=customers,
+                                       engineers=engineers, today=date.today().isoformat())
             w = Warranty(
                 warranty_number         = Warranty.generate_warranty_number(),
                 lru_part_number         = request.form['lru_part_number'].strip().upper(),
                 lru_serial_number       = request.form['lru_serial_number'].strip().upper(),
                 lru_description         = request.form.get('lru_description', '').strip() or None,
                 customer_id             = int(request.form['customer_id']),
-                current_mco             = request.form['current_mco'].strip().upper(),
-                former_mco              = request.form.get('former_mco', '').strip().upper() or None,
+                current_mco             = current_mco_raw,
+                former_mco              = former_mco_raw,
                 former_arc_date         = parse_date(request.form.get('former_arc_date')),
                 defect_date             = parse_date(request.form.get('defect_date')),
                 adjudication_start_date = parse_date(request.form['adjudication_start_date']),
@@ -601,7 +643,7 @@ def warranty_new():
 @login_required
 def warranty_detail(warranty_id):
     w = Warranty.query.get_or_404(warranty_id)
-    activities = w.activities.order_by(WarrantyActivity.timestamp.asc()).all()
+    activities = w.activities.order_by(WarrantyActivity.timestamp.desc()).all()
     return render_template('warranty_detail.html',
         w=w,
         activities=activities,
@@ -631,11 +673,26 @@ def warranty_edit(warranty_id):
                     changes.append(f'{label}: «{old_val}» → «{new_val}»')
                     setattr(w, field, new_val)
 
+            # MCO validation on edit
+            new_cur_mco = request.form.get('current_mco', '').strip()
+            new_frm_mco = request.form.get('former_mco', '').strip()
+            if not validate_mco(new_cur_mco):
+                flash('Current MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_edit.html', w=w, customers=customers, engineers=engineers)
+            if not validate_mco(new_frm_mco):
+                flash('Former MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_edit.html', w=w, customers=customers, engineers=engineers)
+
             track('lru_part_number',    'LRU P/N',          str.upper)
             track('lru_serial_number',  'LRU S/N',          str.upper)
             track('lru_description',    'Description')
-            track('current_mco',        'Current MCO',      str.upper)
-            track('former_mco',         'Former MCO',       str.upper)
+            # Track MCO changes manually (already validated above)
+            if new_cur_mco != w.current_mco:
+                changes.append(f'Current MCO: «{w.current_mco}» → «{new_cur_mco}»')
+                w.current_mco = new_cur_mco
+            if new_frm_mco != w.former_mco:
+                changes.append(f'Former MCO: «{w.former_mco}» → «{new_frm_mco}»')
+                w.former_mco = new_frm_mco
             track('observed_defect',    'Observed Defect')
             track('reason_for_removal', 'Reason for Removal')
             track('ata_chapter',        'ATA Chapter',      str.upper)
@@ -758,6 +815,74 @@ def add_comment(warranty_id):
         db.session.commit()
         flash('Comment added.', 'success')
     return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WARRANTY — TECHNICAL REPORT UPLOAD / DOWNLOAD / DELETE
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/warranty/<int:warranty_id>/upload-report', methods=['POST'])
+@login_required
+def upload_report(warranty_id):
+    w = Warranty.query.get_or_404(warranty_id)
+    if 'report_file' not in request.files:
+        flash('No file selected.', 'warning')
+        return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+    file = request.files['report_file']
+    if not file or file.filename == '':
+        flash('No file selected.', 'warning')
+        return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+    if not allowed_report_file(file.filename):
+        flash('Only PDF and Word documents (.pdf, .doc, .docx) are allowed.', 'danger')
+        return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    # Delete old report file if present
+    if w.technical_report_stored:
+        old_path = os.path.join(app.config['UPLOAD_FOLDER'], w.technical_report_stored)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    stored_name = f'report_{warranty_id}_{secrets.token_hex(8)}.{ext}'
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], stored_name))
+    original_name = secure_filename(file.filename)
+    w.technical_report_filename = original_name
+    w.technical_report_stored   = stored_name
+    w.updated_at = datetime.utcnow()
+    log_activity(w, ActivityType.EDITED,
+                 comment=f'Technical report uploaded: {original_name}')
+    db.session.commit()
+    flash('Technical report uploaded successfully.', 'success')
+    return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+
+
+@app.route('/warranty/<int:warranty_id>/download-report')
+@login_required
+def download_report(warranty_id):
+    w = Warranty.query.get_or_404(warranty_id)
+    if not w.technical_report_stored:
+        abort(404)
+    report_path = os.path.join(app.config['UPLOAD_FOLDER'], w.technical_report_stored)
+    if not os.path.exists(report_path):
+        abort(404)
+    return send_file(report_path, download_name=w.technical_report_filename,
+                     as_attachment=True)
+
+
+@app.route('/warranty/<int:warranty_id>/delete-report', methods=['POST'])
+@login_required
+def delete_report(warranty_id):
+    w = Warranty.query.get_or_404(warranty_id)
+    if w.technical_report_stored:
+        path = os.path.join(app.config['UPLOAD_FOLDER'], w.technical_report_stored)
+        if os.path.exists(path):
+            os.remove(path)
+        w.technical_report_stored   = None
+        w.technical_report_filename = None
+        w.updated_at = datetime.utcnow()
+        log_activity(w, ActivityType.EDITED, comment='Technical report deleted.')
+        db.session.commit()
+        flash('Technical report deleted.', 'success')
+    return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WARRANTY — ASSIGN / REMOVE ENGINEER
@@ -1031,7 +1156,9 @@ def admin_panel():
     tab = request.args.get('tab', 'users')
     users = User.query.order_by(User.last_name, User.first_name).all()
     customers = Customer.query.order_by(Customer.name).all()
-    return render_template('admin.html', users=users, customers=customers, tab=tab)
+    lru_parts = LRUPart.query.order_by(LRUPart.part_number).all()
+    return render_template('admin.html', users=users, customers=customers,
+                           lru_parts=lru_parts, tab=tab)
 
 
 @app.route('/admin/users/new', methods=['POST'])
@@ -1197,6 +1324,72 @@ def admin_toggle_customer(cid):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ADMIN — LRU Parts reference table
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/admin/lru-parts/new', methods=['POST'])
+@login_required
+@admin_required
+def admin_lru_new():
+    pn = request.form.get('part_number', '').strip().upper()
+    if not pn:
+        flash('Part number is required.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    if LRUPart.query.filter_by(part_number=pn).first():
+        flash(f'Part number "{pn}" already exists.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    desc = request.form.get('description', '').strip()
+    if not desc:
+        flash('Description is required.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    part = LRUPart(
+        part_number=pn,
+        ata_chapter=request.form.get('ata_chapter', '').strip().upper() or None,
+        description=desc,
+    )
+    db.session.add(part)
+    db.session.commit()
+    flash(f'LRU Part {pn} created.', 'success')
+    return redirect(url_for('admin_panel', tab='lru_parts'))
+
+
+@app.route('/admin/lru-parts/<int:pid>/edit', methods=['POST'])
+@login_required
+@admin_required
+def admin_lru_edit(pid):
+    part = LRUPart.query.get_or_404(pid)
+    new_pn = request.form.get('part_number', '').strip().upper()
+    if not new_pn:
+        flash('Part number is required.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    conflict = LRUPart.query.filter(LRUPart.part_number == new_pn, LRUPart.id != pid).first()
+    if conflict:
+        flash(f'Part number "{new_pn}" already in use.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    desc = request.form.get('description', '').strip()
+    if not desc:
+        flash('Description is required.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    part.part_number = new_pn
+    part.ata_chapter = request.form.get('ata_chapter', '').strip().upper() or None
+    part.description = desc
+    db.session.commit()
+    flash(f'LRU Part {new_pn} updated.', 'success')
+    return redirect(url_for('admin_panel', tab='lru_parts'))
+
+
+@app.route('/admin/lru-parts/<int:pid>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def admin_lru_toggle(pid):
+    part = LRUPart.query.get_or_404(pid)
+    part.is_active = not part.is_active
+    db.session.commit()
+    state = 'activated' if part.is_active else 'deactivated'
+    flash(f'LRU Part {part.part_number} {state}.', 'success')
+    return redirect(url_for('admin_panel', tab='lru_parts'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CLI — DATABASE INIT & SEED
 # ─────────────────────────────────────────────────────────────────────────────
 @app.cli.command('init-db')
@@ -1263,8 +1456,8 @@ def seed_warranties():
             lru_serial_number       = f'SN-{random.randint(10000, 99999)}',
             lru_description         = part[1],
             customer_id             = customer.id,
-            current_mco             = f'MCO-{random.randint(2022,2025)}-{random.randint(1000,9999)}',
-            former_mco              = f'MCO-{random.randint(2018,2022)}-{random.randint(1000,9999)}',
+            current_mco             = f'5000{random.randint(100000, 999999)}',
+            former_mco              = f'5000{random.randint(100000, 999999)}',
             former_arc_date         = start_d - timedelta(days=random.randint(90, 900)),
             defect_date             = start_d - timedelta(days=random.randint(5, 60)),
             adjudication_start_date = start_d,

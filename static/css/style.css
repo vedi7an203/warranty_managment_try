@@ -226,6 +226,47 @@ main { flex: 1; }
   background: color-mix(in srgb, var(--status-color) 10%, white);
   border: 2px solid var(--status-color);
 }
+/* Clickable variant */
+.status-hero-btn {
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.1s;
+  background: color-mix(in srgb, var(--status-color) 10%, white);
+  border: 2px solid var(--status-color);
+  border-radius: 10px;
+  outline: none;
+  text-align: left;
+}
+.status-hero-btn:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-color) 25%, transparent);
+  transform: translateY(-1px);
+}
+.status-edit-icon {
+  font-size: 0.65rem;
+  opacity: 0.5;
+  margin-left: 4px;
+}
+.status-hero-btn:hover .status-edit-icon { opacity: 1; }
+
+/* ── Fixed Info Strip ─────────────────────────── */
+.info-strip {
+  background: var(--wam-card);
+  border: 1px solid var(--wam-border);
+}
+.info-strip-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--wam-muted);
+  margin-bottom: 1px;
+}
+.info-strip-value {
+  font-size: 0.82rem;
+  color: var(--wam-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .status-dot {
   width: 12px; height: 12px;
   border-radius: 50%;

@@ -3,7 +3,7 @@
 
 {% block content %}
 <!-- ────────────────────────  BREADCRUMB + HEADER  ──────────────────────── -->
-<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
   <div>
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb mb-1 small">
@@ -11,7 +11,7 @@
         <li class="breadcrumb-item active">{{ w.warranty_number }}</li>
       </ol>
     </nav>
-    <h3 class="mb-1 fw-bold">
+    <h3 class="mb-0 fw-bold">
       <span class="font-monospace">{{ w.warranty_number }}</span>
       {% if w.previous_warranty_count > 0 %}
       <span class="badge bg-warning text-dark ms-2 small align-middle"
@@ -21,15 +21,16 @@
       {% endif %}
     </h3>
     <p class="text-muted mb-0 small">
-      {{ w.lru_description or w.lru_part_number }}
-      &nbsp;&bull;&nbsp; {{ w.customer.name if w.customer else '—' }}
-      &nbsp;&bull;&nbsp; Created {{ w.created_at|fdatetime }} by {{ w.created_by_user.full_name }}
+      Created {{ w.created_at|fdatetime }} by {{ w.created_by_user.full_name }}
     </p>
   </div>
 
-  <!-- Status badge (large) -->
+  <!-- Status badge (clickable → ouvre le modal) + Edit button -->
   <div class="text-end">
-    <div class="status-hero" style="--status-color: {{ w.status_hex }}">
+    <button type="button" class="status-hero status-hero-btn"
+            style="--status-color: {{ w.status_hex }}"
+            data-bs-toggle="modal" data-bs-target="#statusModal"
+            title="Click to change status">
       <div class="status-dot"></div>
       <div>
         <div class="status-main">{{ w.effective_status_label }}</div>
@@ -39,16 +40,71 @@
         <div class="status-sub">Since {{ w.adjudication_start_date|fdate }}</div>
         {% endif %}
       </div>
-    </div>
-    <div class="mt-2 d-flex gap-2 justify-content-end">
+      <i class="fa-solid fa-pen-to-square ms-2 status-edit-icon"></i>
+    </button>
+    <div class="mt-2">
       <a href="{{ url_for('warranty_edit', warranty_id=w.id) }}"
          class="btn btn-sm btn-outline-secondary">
         <i class="fa-solid fa-pen me-1"></i>Edit
       </a>
-      <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
-              data-bs-target="#statusModal">
-        <i class="fa-solid fa-exchange-alt me-1"></i>Change Status
-      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────  FIXED INFO STRIP  ────────────────────── -->
+<div class="card info-strip mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-6">
+      <div class="col">
+        <div class="info-strip-label">Part Number</div>
+        <div class="info-strip-value font-monospace fw-bold">{{ w.lru_part_number }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Serial Number</div>
+        <div class="info-strip-value font-monospace">{{ w.lru_serial_number }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Description</div>
+        <div class="info-strip-value">{{ w.lru_description or '—' }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Customer</div>
+        <div class="info-strip-value">{{ w.customer.name if w.customer else '—' }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Current MCO</div>
+        <div class="info-strip-value font-monospace text-primary fw-bold">{{ w.current_mco }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Former MCO</div>
+        <div class="info-strip-value font-monospace">{{ w.former_mco or '—' }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Former ARC Date</div>
+        <div class="info-strip-value">{{ w.former_arc_date|fdate }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Adj. Start</div>
+        <div class="info-strip-value">{{ w.adjudication_start_date|fdate }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">Date of Defect</div>
+        <div class="info-strip-value">{{ w.defect_date|fdate }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">TSI</div>
+        <div class="info-strip-value font-monospace">{{ w.tsi|hours }}</div>
+      </div>
+      <div class="col">
+        <div class="info-strip-label">TSO</div>
+        <div class="info-strip-value font-monospace">{{ w.tso|hours }}</div>
+      </div>
+      {% if w.ata_chapter %}
+      <div class="col">
+        <div class="info-strip-label">ATA Chapter</div>
+        <div class="info-strip-value">{{ w.ata_chapter }}</div>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -57,115 +113,77 @@
   <!-- ════════════════  LEFT COLUMN  ════════════════ -->
   <div class="col-12 col-xl-8">
 
-    <!-- Summary Cards row 1 -->
-    <div class="row g-3 mb-3">
-      <!-- Part Info -->
-      <div class="col-md-6">
-        <div class="card info-card h-100">
-          <div class="card-header info-header">
-            <i class="fa-solid fa-microchip me-2 text-primary"></i>LRU / Part
-          </div>
-          <div class="card-body">
-            <dl class="info-dl mb-0">
-              <dt>Part Number</dt>
-              <dd class="font-monospace fw-bold">{{ w.lru_part_number }}</dd>
-              <dt>Serial Number</dt>
-              <dd class="font-monospace">{{ w.lru_serial_number }}</dd>
-              {% if w.lru_description %}
-              <dt>Description</dt>
-              <dd>{{ w.lru_description }}</dd>
-              {% endif %}
-              {% if w.ata_chapter %}
-              <dt>ATA Chapter</dt>
-              <dd>{{ w.ata_chapter }}</dd>
-              {% endif %}
-              <dt>Customer</dt>
-              <dd>{{ w.customer.name if w.customer else '—' }}
-                {% if w.customer %}<span class="text-muted small">({{ w.customer.code }})</span>{% endif %}
-              </dd>
-            </dl>
-          </div>
-        </div>
+    <!-- Defect Details -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header">
+        <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Defect Details
       </div>
-
-      <!-- MCO / Dates -->
-      <div class="col-md-6">
-        <div class="card info-card h-100">
-          <div class="card-header info-header">
-            <i class="fa-solid fa-clipboard-list me-2 text-info"></i>MCO &amp; Dates
-          </div>
-          <div class="card-body">
-            <dl class="info-dl mb-0">
-              <dt>Current MCO</dt>
-              <dd class="font-monospace fw-bold text-primary">{{ w.current_mco }}</dd>
-              <dt>Former MCO</dt>
-              <dd class="font-monospace">{{ w.former_mco or '—' }}</dd>
-              <dt>Former ARC Date</dt>
-              <dd>{{ w.former_arc_date|fdate }}</dd>
-              <dt>Adjudication Start</dt>
-              <dd>{{ w.adjudication_start_date|fdate }}</dd>
-              <dt>Date of Defect</dt>
-              <dd>{{ w.defect_date|fdate }}</dd>
-              {% if w.installation_date %}
-              <dt>Installation Date</dt>
-              <dd>{{ w.installation_date|fdate }}</dd>
-              {% endif %}
-            </dl>
-          </div>
-        </div>
+      <div class="card-body">
+        <p class="small fw-semibold text-muted mb-1">Observed Defect</p>
+        <p class="mb-3">{{ w.observed_defect }}</p>
+        {% if w.reason_for_removal %}
+        <p class="small fw-semibold text-muted mb-1">Reason for Removal</p>
+        <p class="mb-0">{{ w.reason_for_removal }}</p>
+        {% endif %}
+        {% if w.status == 'closed' and w.closure_comments %}
+        <hr class="my-2">
+        <p class="small fw-semibold text-muted mb-1">Closure Comments</p>
+        <p class="mb-0 small">{{ w.closure_comments }}</p>
+        {% endif %}
       </div>
     </div>
 
-    <!-- Summary Cards row 2 -->
-    <div class="row g-3 mb-3">
-      <!-- Defect -->
-      <div class="col-md-8">
-        <div class="card info-card h-100">
-          <div class="card-header info-header">
-            <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Defect Details
-          </div>
-          <div class="card-body">
-            <p class="small fw-semibold text-muted mb-1">Observed Defect</p>
-            <p class="mb-3">{{ w.observed_defect }}</p>
-            {% if w.reason_for_removal %}
-            <p class="small fw-semibold text-muted mb-1">Reason for Removal</p>
-            <p class="mb-0">{{ w.reason_for_removal }}</p>
-            {% endif %}
-            {% if w.status == 'closed' and w.closure_comments %}
-            <hr class="my-2">
-            <p class="small fw-semibold text-muted mb-1">Closure Comments</p>
-            <p class="mb-0 small">{{ w.closure_comments }}</p>
-            {% endif %}
-          </div>
-        </div>
+    <!-- Technical Report -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-file-lines me-2 text-danger"></i>Technical Report</span>
+        {% if w.technical_report_filename %}
+        <span class="badge bg-success">
+          <i class="fa-solid fa-paperclip me-1"></i>Attached
+        </span>
+        {% endif %}
       </div>
-
-      <!-- Time Params -->
-      <div class="col-md-4">
-        <div class="card info-card h-100">
-          <div class="card-header info-header">
-            <i class="fa-solid fa-clock-rotate-left me-2 text-success"></i>Time Params
-          </div>
-          <div class="card-body">
-            <div class="time-metric mb-3">
-              <div class="time-label">TSI</div>
-              <div class="time-value">{{ w.tsi|hours }}</div>
-              <div class="time-sub">Time Since Installation</div>
-            </div>
-            <div class="time-metric mb-3">
-              <div class="time-label">TSO</div>
-              <div class="time-value">{{ w.tso|hours }}</div>
-              <div class="time-sub">Time Since Overhaul</div>
-            </div>
-            {% if w.flight_cycles_since_installation %}
-            <div class="time-metric">
-              <div class="time-label">FC</div>
-              <div class="time-value">{{ w.flight_cycles_since_installation }}</div>
-              <div class="time-sub">Flight Cycles</div>
-            </div>
+      <div class="card-body">
+        {% if w.technical_report_filename %}
+        <div class="d-flex align-items-center justify-content-between p-2 border rounded bg-light mb-3">
+          <div class="d-flex align-items-center gap-2">
+            {% set ext = w.technical_report_filename.rsplit('.', 1)[-1].lower() %}
+            {% if ext == 'pdf' %}
+            <i class="fa-solid fa-file-pdf fa-2x text-danger"></i>
+            {% else %}
+            <i class="fa-solid fa-file-word fa-2x text-primary"></i>
             {% endif %}
+            <div>
+              <div class="small fw-semibold">{{ w.technical_report_filename }}</div>
+              <div class="tiny text-muted">Technical report attached</div>
+            </div>
+          </div>
+          <div class="d-flex gap-1">
+            <a href="{{ url_for('download_report', warranty_id=w.id) }}"
+               class="btn btn-sm btn-outline-primary">
+              <i class="fa-solid fa-download me-1"></i>Download
+            </a>
+            <form method="POST" action="{{ url_for('delete_report', warranty_id=w.id) }}"
+                  onsubmit="return confirm('Delete the attached report?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </form>
           </div>
         </div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('upload_report', warranty_id=w.id) }}"
+              enctype="multipart/form-data">
+          <div class="input-group input-group-sm">
+            <input type="file" name="report_file" class="form-control"
+                   accept=".pdf,.doc,.docx" required/>
+            <button type="submit" class="btn btn-outline-secondary">
+              <i class="fa-solid fa-upload me-1"></i>
+              {{ 'Replace' if w.technical_report_filename else 'Upload' }}
+            </button>
+          </div>
+          <div class="form-text">PDF or Word document (.pdf, .doc, .docx)</div>
+        </form>
       </div>
     </div>
 
@@ -176,6 +194,24 @@
         <span class="badge bg-secondary">{{ activities|length }} events</span>
       </div>
       <div class="card-body p-0">
+
+        <!-- Add Comment — at the TOP -->
+        <div class="px-3 pt-3 pb-2 border-bottom">
+          <form method="POST" action="{{ url_for('add_comment', warranty_id=w.id) }}">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">
+                <i class="fa-solid fa-comment-dots text-info"></i>
+              </span>
+              <input type="text" name="comment" class="form-control"
+                     placeholder="Add a comment or investigation note…" required/>
+              <button type="submit" class="btn btn-info text-white btn-sm">
+                Add Note
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Timeline entries (newest first) -->
         <div class="timeline px-3 py-2">
           {% for act in activities %}
           <div class="timeline-item">
@@ -211,21 +247,6 @@
           {% endfor %}
         </div>
 
-        <!-- Add Comment -->
-        <div class="px-3 pb-3 pt-1 border-top">
-          <form method="POST" action="{{ url_for('add_comment', warranty_id=w.id) }}">
-            <div class="input-group input-group-sm">
-              <span class="input-group-text">
-                <i class="fa-solid fa-comment-dots text-info"></i>
-              </span>
-              <input type="text" name="comment" class="form-control"
-                     placeholder="Add a comment or investigation note…" required/>
-              <button type="submit" class="btn btn-info text-white btn-sm">
-                Add Note
-              </button>
-            </div>
-          </form>
-        </div>
       </div>
     </div>
 
@@ -233,6 +254,32 @@
 
   <!-- ════════════════  RIGHT COLUMN  ════════════════ -->
   <div class="col-12 col-xl-4">
+
+    <!-- Time Parameters -->
+    <div class="card info-card mb-3">
+      <div class="card-header info-header">
+        <i class="fa-solid fa-clock-rotate-left me-2 text-success"></i>Time Params
+      </div>
+      <div class="card-body">
+        <div class="time-metric mb-3">
+          <div class="time-label">TSI</div>
+          <div class="time-value">{{ w.tsi|hours }}</div>
+          <div class="time-sub">Time Since Installation</div>
+        </div>
+        <div class="time-metric mb-3">
+          <div class="time-label">TSO</div>
+          <div class="time-value">{{ w.tso|hours }}</div>
+          <div class="time-sub">Time Since Overhaul</div>
+        </div>
+        {% if w.flight_cycles_since_installation %}
+        <div class="time-metric">
+          <div class="time-label">FC</div>
+          <div class="time-value">{{ w.flight_cycles_since_installation }}</div>
+          <div class="time-sub">Flight Cycles</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
 
     <!-- Assigned Engineers -->
     <div class="card info-card mb-3">
