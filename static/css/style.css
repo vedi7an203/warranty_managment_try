@@ -381,6 +381,12 @@ main { flex: 1; }
   color: var(--wam-text) !important;
 }
 .prev-warranty-item:hover { background: #e8f0fe; }
+.prev-warranty-current {
+  background: #eff6ff;
+  border: 2px solid #3b82f6;
+  cursor: default;
+}
+.prev-warranty-current:hover { background: #eff6ff; }
 
 /* ── Form Cards ─────────────────────────── */
 .form-card {
