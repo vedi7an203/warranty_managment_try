@@ -9,10 +9,50 @@
   <h4 class="mb-0 fw-bold"><i class="fa-solid fa-plus-circle text-success me-2"></i>New Warranty Request</h4>
 </div>
 
+<style>
+.autocomplete-wrapper { position: relative; }
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-top: none;
+  border-radius: 0 0 .375rem .375rem;
+  max-height: 240px;
+  overflow-y: auto;
+  display: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.autocomplete-dropdown.show { display: block; }
+.autocomplete-item {
+  padding: .45rem .75rem;
+  cursor: pointer;
+  font-size: .9rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+.autocomplete-item:last-child { border-bottom: none; }
+.autocomplete-item:hover,
+.autocomplete-item.active { background: #e9f0ff; }
+.autocomplete-item small { color: #6c757d; }
+.autocomplete-badge {
+  display: inline-block;
+  padding: .15rem .4rem;
+  border-radius: .25rem;
+  font-size: .75rem;
+  background: #e7f1ff;
+  color: #0a58ca;
+  font-weight: 600;
+  margin-right: .35rem;
+}
+</style>
+
 <form method="POST" action="{{ url_for('warranty_new') }}" id="warrantyForm" novalidate>
 <div class="row g-4">
 
-  <!-- ── Col 1 ─────────────────────────────────────── -->
+  <!-- ── Col 1 ─────────────────────────────────────────────────────────── -->
   <div class="col-12 col-xl-6">
 
     <!-- Part Information -->
@@ -22,35 +62,52 @@
       </div>
       <div class="card-body">
         <div class="row g-3">
+
+          <!-- PN autocomplete -->
           <div class="col-md-6">
             <label class="form-label required-label">LRU Part Number</label>
-            <input type="text" name="lru_part_number" class="form-control text-uppercase"
-                   placeholder="e.g. P145-AHRS-0210" required/>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="pn_search" class="form-control text-uppercase"
+                     placeholder="Type to search PN…" autocomplete="off"/>
+              <div id="pn_dropdown" class="autocomplete-dropdown"></div>
+            </div>
+            <!-- Hidden field sent to server -->
+            <input type="hidden" name="lru_part_number" id="pn_value" required/>
+            <div class="invalid-feedback">Please select a valid Part Number from the list.</div>
           </div>
+
           <div class="col-md-6">
             <label class="form-label required-label">LRU Serial Number</label>
             <input type="text" name="lru_serial_number" class="form-control text-uppercase"
                    placeholder="e.g. SN-12345" required/>
           </div>
+
+          <!-- Description auto-filled from DB -->
           <div class="col-12">
             <label class="form-label">LRU Description</label>
-            <input type="text" name="lru_description" class="form-control"
-                   placeholder="e.g. Attitude &amp; Heading Reference System"/>
+            <input type="text" name="lru_description" id="lru_description" class="form-control"
+                   placeholder="Auto-filled when PN is selected"/>
           </div>
+
+          <!-- Customer autocomplete -->
           <div class="col-md-6">
             <label class="form-label required-label">Customer</label>
-            <select name="customer_id" class="form-select" required>
-              <option value="">Select customer…</option>
-              {% for c in customers %}
-              <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
-              {% endfor %}
-            </select>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="customer_search" class="form-control"
+                     placeholder="Type to search customer…" autocomplete="off"/>
+              <div id="customer_dropdown" class="autocomplete-dropdown"></div>
+            </div>
+            <input type="hidden" name="customer_id" id="customer_id_value" required/>
+            <div class="invalid-feedback">Please select a customer from the list.</div>
           </div>
+
+          <!-- ATA Chapter auto-filled from DB -->
           <div class="col-md-6">
             <label class="form-label">ATA Chapter</label>
-            <input type="text" name="ata_chapter" class="form-control text-uppercase"
-                   placeholder="e.g. 34-21"/>
+            <input type="text" name="ata_chapter" id="ata_chapter" class="form-control text-uppercase"
+                   placeholder="Auto-filled when PN is selected"/>
           </div>
+
         </div>
       </div>
     </div>
@@ -63,20 +120,24 @@
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-6">
-            <label class="form-label required-label">Current MCO</label>
-            <input type="text" name="current_mco" class="form-control font-monospace"
-                   placeholder="e.g. 5000457741" pattern="\d{10}"
-                   title="10-digit number starting with 5000" required
-                   maxlength="10"/>
+            <label class="form-label required-label">Former MCO</label>
+            <input type="text" name="former_mco" id="former_mco" class="form-control font-monospace"
+                   placeholder="e.g. 5000123456" pattern="\d{10}"
+                   title="10-digit number starting with 5000" required maxlength="10"/>
             <div class="form-text">10 digits starting with 5000</div>
           </div>
           <div class="col-md-6">
-            <label class="form-label required-label">Former MCO</label>
-            <input type="text" name="former_mco" class="form-control font-monospace"
-                   placeholder="e.g. 5000123456" pattern="\d{10}"
-                   title="10-digit number starting with 5000" required
-                   maxlength="10"/>
-            <div class="form-text">10 digits starting with 5000</div>
+            <label class="form-label required-label">Current MCO</label>
+            <input type="text" name="current_mco" id="current_mco" class="form-control font-monospace"
+                   placeholder="e.g. 5000457741" pattern="\d{10}"
+                   title="10-digit number starting with 5000" required maxlength="10"/>
+            <div class="form-text">10 digits starting with 5000 — must be &gt; Former MCO</div>
+          </div>
+          <div id="mco_error" class="col-12" style="display:none;">
+            <div class="alert alert-danger py-1 mb-0 small">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>
+              Current MCO must be strictly greater than Former MCO.
+            </div>
           </div>
           <div class="col-md-6">
             <label class="form-label">Former ARC Date</label>
@@ -119,7 +180,7 @@
 
   </div>
 
-  <!-- ── Col 2 ─────────────────────────────────────── -->
+  <!-- ── Col 2 ─────────────────────────────────────────────────────────── -->
   <div class="col-12 col-xl-6">
 
     <!-- Defect Information -->
@@ -196,15 +257,171 @@
 
 {% block scripts %}
 <script>
-// Bootstrap validation
+// ── Autocomplete helper ──────────────────────────────────────────────────────
+function setupAutocomplete({ inputId, dropdownId, hiddenId, apiUrl, labelFn, onSelect }) {
+  const input    = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  const hidden   = hiddenId ? document.getElementById(hiddenId) : null;
+  let activeIdx  = -1;
+  let results    = [];
+
+  function closeDropdown() {
+    dropdown.classList.remove('show');
+    activeIdx = -1;
+  }
+
+  function renderItems(items) {
+    results = items;
+    dropdown.innerHTML = '';
+    activeIdx = -1;
+    if (!items.length) { closeDropdown(); return; }
+    items.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'autocomplete-item';
+      div.innerHTML = labelFn(item);
+      div.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectItem(item);
+      });
+      dropdown.appendChild(div);
+    });
+    dropdown.classList.add('show');
+  }
+
+  function selectItem(item) {
+    onSelect(item, input, hidden);
+    closeDropdown();
+  }
+
+  function setActive(idx) {
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    items.forEach(el => el.classList.remove('active'));
+    if (idx >= 0 && idx < items.length) {
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    }
+    activeIdx = idx;
+  }
+
+  let debounceTimer;
+  input.addEventListener('input', () => {
+    if (hidden) hidden.value = '';  // reset hidden on every keystroke
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if (!q) { closeDropdown(); return; }
+    debounceTimer = setTimeout(() => {
+      fetch(`${apiUrl}?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(renderItems)
+        .catch(() => closeDropdown());
+    }, 200);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActive(Math.min(activeIdx + 1, items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive(Math.max(activeIdx - 1, 0));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      selectItem(results[activeIdx]);
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+  });
+}
+
+// ── PN Autocomplete ──────────────────────────────────────────────────────────
+setupAutocomplete({
+  inputId:    'pn_search',
+  dropdownId: 'pn_dropdown',
+  hiddenId:   'pn_value',
+  apiUrl:     '{{ url_for("api_lru_parts_search") }}',
+  labelFn: (item) =>
+    `<span class="autocomplete-badge">${item.part_number}</span>` +
+    `<small>${item.description}` +
+    (item.ata_chapter ? ` — ATA ${item.ata_chapter}` : '') +
+    `</small>`,
+  onSelect: (item, input, hidden) => {
+    input.value   = item.part_number;
+    hidden.value  = item.part_number;
+    document.getElementById('lru_description').value = item.description;
+    document.getElementById('ata_chapter').value     = item.ata_chapter || '';
+  }
+});
+
+// ── Customer Autocomplete ────────────────────────────────────────────────────
+setupAutocomplete({
+  inputId:    'customer_search',
+  dropdownId: 'customer_dropdown',
+  hiddenId:   'customer_id_value',
+  apiUrl:     '{{ url_for("api_customers_search") }}',
+  labelFn: (item) =>
+    `<span class="autocomplete-badge">${item.code}</span>` +
+    `<small>${item.name}</small>`,
+  onSelect: (item, input, hidden) => {
+    input.value  = `${item.name} (${item.code})`;
+    hidden.value = item.id;
+  }
+});
+
+// ── MCO comparison validation ────────────────────────────────────────────────
+function checkMco() {
+  const cur = document.getElementById('current_mco').value.trim();
+  const fmr = document.getElementById('former_mco').value.trim();
+  const err = document.getElementById('mco_error');
+  if (cur.length === 10 && fmr.length === 10 && /^\d+$/.test(cur) && /^\d+$/.test(fmr)) {
+    if (parseInt(cur, 10) <= parseInt(fmr, 10)) {
+      err.style.display = 'block';
+      return false;
+    }
+  }
+  err.style.display = 'none';
+  return true;
+}
+document.getElementById('current_mco').addEventListener('input', checkMco);
+document.getElementById('former_mco').addEventListener('input', checkMco);
+
+// ── Form submit validation ───────────────────────────────────────────────────
 document.getElementById('warrantyForm').addEventListener('submit', function(e) {
-  if (!this.checkValidity()) {
+  let valid = this.checkValidity();
+
+  // Validate hidden PN field
+  const pnHidden = document.getElementById('pn_value');
+  if (!pnHidden.value) {
+    document.getElementById('pn_search').setCustomValidity('Please select a PN from the list.');
+    valid = false;
+  } else {
+    document.getElementById('pn_search').setCustomValidity('');
+  }
+
+  // Validate hidden customer field
+  const custHidden = document.getElementById('customer_id_value');
+  if (!custHidden.value) {
+    document.getElementById('customer_search').setCustomValidity('Please select a customer from the list.');
+    valid = false;
+  } else {
+    document.getElementById('customer_search').setCustomValidity('');
+  }
+
+  // MCO comparison
+  if (!checkMco()) { valid = false; }
+
+  if (!valid) {
     e.preventDefault();
     e.stopPropagation();
   }
   this.classList.add('was-validated');
 });
-// Auto-uppercase
+
+// Auto-uppercase for text fields (except autocomplete search inputs which handle their own)
 document.querySelectorAll('.text-uppercase').forEach(el => {
   el.addEventListener('input', () => { el.value = el.value.toUpperCase(); });
 });
