@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% block title %}Transfer Warranties — {{ from_user.full_name }} — WAM{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <a href="{{ url_for('admin_panel', tab='users') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left me-1"></i>Back to Admin
+  </a>
+  <h5 class="mb-0">
+    <i class="fa-solid fa-arrow-right-arrow-left me-2" style="color:var(--wam-accent)"></i>
+    Transfer Warranties — <strong>{{ from_user.full_name }}</strong>
+    <span class="badge bg-secondary ms-1">{{ from_user.role }}</span>
+    {% if not from_user.is_active %}
+      <span class="badge bg-danger ms-1">Blocked</span>
+    {% endif %}
+  </h5>
+</div>
+
+{% if not warranties %}
+  <div class="alert alert-info">
+    <i class="fa-solid fa-circle-info me-2"></i>
+    <strong>{{ from_user.full_name }}</strong> has no open warranties to transfer.
+  </div>
+{% else %}
+<form method="post">
+  <div class="card mb-3">
+    <div class="card-header py-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="fw-semibold">
+          <i class="fa-solid fa-list me-1"></i>
+          {{ warranties|length }} open warrant{{ 'y' if warranties|length == 1 else 'ies' }}
+        </span>
+        <div class="btn-group btn-group-sm">
+          <button type="button" class="btn btn-outline-secondary" id="btnSelectAll">
+            <i class="fa-solid fa-check-double me-1"></i>Select All
+          </button>
+          <button type="button" class="btn btn-outline-secondary" id="btnSelectNone">
+            <i class="fa-solid fa-xmark me-1"></i>None
+          </button>
+        </div>
+        <input type="text" id="warrantySearch" class="form-control form-control-sm"
+               placeholder="&#128269; Filter…" style="max-width:200px">
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="warrantyTable">
+        <thead class="table-light small text-uppercase text-muted">
+          <tr>
+            <th style="width:36px">
+              <input type="checkbox" id="chkAll" class="form-check-input">
+            </th>
+            <th>Warranty #</th>
+            <th>Customer</th>
+            <th>Part / S/N</th>
+            <th>Status</th>
+            <th>Opened</th>
+            <th>Assigned Engineers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in warranties %}
+          <tr>
+            <td>
+              <input type="checkbox" name="warranty_ids" value="{{ w.id }}"
+                     class="form-check-input wchk">
+            </td>
+            <td>
+              <a href="{{ url_for('warranty_detail', warranty_id=w.id) }}"
+                 class="fw-semibold text-decoration-none" target="_blank">
+                {{ w.warranty_number }}
+                <i class="fa-solid fa-arrow-up-right-from-square fa-xs text-muted ms-1"></i>
+              </a>
+            </td>
+            <td>{{ w.customer.name }}</td>
+            <td>
+              <span class="small">{{ w.lru_part_number }}</span><br>
+              <span class="text-muted small">S/N {{ w.lru_serial_number }}</span>
+            </td>
+            <td>
+              {% set sc = {'open':'primary','workshop':'warning','engineering':'purple'} %}
+              <span class="badge" style="background:var(--status-{{ w.status.split('_')[0] }},#888)">
+                {{ w.status|replace('_',' ')|title }}
+              </span>
+            </td>
+            <td class="small text-muted">{{ w.adjudication_start_date|fdate }}</td>
+            <td class="small">
+              {% if w.engineers %}
+                {{ w.engineers|map(attribute='full_name')|join(', ') }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Transfer action bar -->
+  <div class="card">
+    <div class="card-body py-3 d-flex align-items-center gap-3 flex-wrap">
+      <label class="fw-semibold mb-0">Transfer selected to:</label>
+      <select name="to_user_id" class="form-select form-select-sm" style="max-width:300px" required>
+        <option value="" disabled selected>— Choose a user —</option>
+        {% for u in other_users %}
+        <option value="{{ u.id }}">{{ u.full_name }} ({{ u.role }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm" id="btnTransfer" disabled>
+        <i class="fa-solid fa-arrow-right-arrow-left me-1"></i>
+        Transfer <span id="selectedCount">0</span> warrant(ies)
+      </button>
+      <span class="text-muted small">
+        <i class="fa-solid fa-circle-info me-1"></i>
+        Ownership and engineer assignments will be updated.
+      </span>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const checkboxes = document.querySelectorAll('.wchk');
+const btnTransfer = document.getElementById('btnTransfer');
+const selectedCount = document.getElementById('selectedCount');
+const chkAll = document.getElementById('chkAll');
+
+function updateCount() {
+  const n = document.querySelectorAll('.wchk:checked').length;
+  if (selectedCount) selectedCount.textContent = n;
+  if (btnTransfer)   btnTransfer.disabled = n === 0;
+  if (chkAll)        chkAll.indeterminate = n > 0 && n < checkboxes.length;
+  if (chkAll)        chkAll.checked = n === checkboxes.length && n > 0;
+}
+
+checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+
+document.getElementById('btnSelectAll')?.addEventListener('click', function () {
+  checkboxes.forEach(cb => cb.checked = true);
+  updateCount();
+});
+document.getElementById('btnSelectNone')?.addEventListener('click', function () {
+  checkboxes.forEach(cb => cb.checked = false);
+  updateCount();
+});
+if (chkAll) {
+  chkAll.addEventListener('change', function () {
+    checkboxes.forEach(cb => cb.checked = this.checked);
+    updateCount();
+  });
+}
+
+// Live filter
+document.getElementById('warrantySearch')?.addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#warrantyTable tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+updateCount();
+</script>
+{% endblock %}
