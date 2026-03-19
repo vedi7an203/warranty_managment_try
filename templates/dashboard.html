@@ -8,8 +8,8 @@
   .ts-wrapper.multi .ts-control { min-height: 31px; padding: 2px 6px; }
   .ts-wrapper .ts-control { font-size: .8125rem; }
   .ts-dropdown { font-size: .8125rem; }
-  .engineer-edit-btn { opacity: 0; transition: opacity .15s; cursor: pointer; }
-  tr:hover .engineer-edit-btn { opacity: 1; }
+  .eng-avatar-clickable { cursor: pointer; }
+  .eng-avatar-empty { cursor: pointer; opacity: .45; }
   .adj-time-badge { font-size: .75rem; white-space: nowrap; }
   .occ-badge { font-size: .7rem; }
 </style>
@@ -151,9 +151,9 @@
           <th>Customer</th>
           <th>Observed Defect</th>
           <th class="text-end">TSI&nbsp;/&nbsp;TSO</th>
-          <th>Adj. Start</th>
+          <th>Start</th>
           <th>Adj. Time</th>
-          <th>Engineers</th>
+          <th>Engineer</th>
           <th>Updated</th>
         </tr>
       </thead>
@@ -163,10 +163,10 @@
 
           <td>
             <span class="fw-bold font-monospace wnum">{{ w.warranty_number }}</span>
-            {% if w.total_occurrence_count > 1 %}
+            {% if w.occurrence_number > 1 %}
             <span class="badge bg-warning text-dark ms-1 occ-badge"
-                  title="This unit has {{ w.total_occurrence_count }} total warranty(ies) for P/N {{ w.lru_part_number }} / S/N {{ w.lru_serial_number }}">
-              <i class="fa-solid fa-rotate-left"></i>{{ w.total_occurrence_count }}
+                  title="Occurrence #{{ w.occurrence_number }} for P/N {{ w.lru_part_number }} / S/N {{ w.lru_serial_number }}">
+              <i class="fa-solid fa-rotate-left"></i>{{ w.occurrence_number }}
             </span>
             {% endif %}
           </td>
@@ -208,20 +208,13 @@
           </td>
 
           <td onclick="event.stopPropagation()">
-            <div class="d-flex align-items-center gap-1">
-              <div class="d-flex flex-wrap gap-1" id="eng-avatars-{{ w.id }}">
-                {% for eng in w.engineers[:3] %}
-                <span class="avatar-xs" title="{{ eng.full_name }}">{{ eng.initials }}</span>
-                {% endfor %}
-                {% if w.engineers|length > 3 %}
-                <span class="avatar-xs text-muted">+{{ w.engineers|length - 3 }}</span>
-                {% endif %}
-              </div>
-              <button type="button"
-                      class="btn btn-xs btn-outline-secondary engineer-edit-btn ms-1"
-                      title="Edit engineers"
-                      onclick="openEngineerModal({{ w.id }}, {{ w.engineers | map(attribute='id') | list | tojson }})"
-              ><i class="fa-solid fa-pen fa-xs"></i></button>
+            <div id="eng-avatars-{{ w.id }}"
+                 onclick="openEngineerModal({{ w.id }}, {{ (w.engineers[0].id if w.engineers else 0) }})">
+              {% if w.engineers %}
+              <span class="avatar-xs eng-avatar-clickable" title="{{ w.engineers[0].full_name }}">{{ w.engineers[0].initials }}</span>
+              {% else %}
+              <span class="avatar-xs eng-avatar-empty" title="Assign engineer">—</span>
+              {% endif %}
             </div>
           </td>
 
@@ -250,14 +243,21 @@
     <div class="modal-content">
       <div class="modal-header py-2 px-3">
         <h6 class="modal-title mb-0" id="engineerModalLabel">
-          <i class="fa-solid fa-users me-1"></i>Assign Engineers
+          <i class="fa-solid fa-user me-1"></i>Assign Engineer
         </h6>
         <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body px-3 py-2">
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="eng-radio"
+                 value="0" id="eng-none">
+          <label class="form-check-label small text-muted" for="eng-none">
+            — None
+          </label>
+        </div>
         {% for e in engineers %}
         <div class="form-check">
-          <input class="form-check-input eng-checkbox" type="checkbox"
+          <input class="form-check-input eng-radio" type="radio" name="eng-radio"
                  value="{{ e.id }}" id="eng-{{ e.id }}">
           <label class="form-check-label small" for="eng-{{ e.id }}">
             <span class="avatar-xs me-1">{{ e.initials }}</span>{{ e.full_name }}
@@ -313,24 +313,29 @@ document.getElementById('downloadBtn').addEventListener('click', function() {
   window.location = '{{ url_for("dashboard_download") }}?' + params.toString();
 });
 
-// ── Engineer inline edit modal
+// ── Engineer inline edit modal (single engineer)
 var currentWarrantyId = null;
 var engineerModal = new bootstrap.Modal(document.getElementById('engineerModal'));
 
-function openEngineerModal(warrantyId, currentEngIds) {
+function openEngineerModal(warrantyId, currentEngId) {
   currentWarrantyId = warrantyId;
-  document.querySelectorAll('.eng-checkbox').forEach(function(cb) {
-    cb.checked = currentEngIds.indexOf(parseInt(cb.value)) !== -1;
+  var radios = document.querySelectorAll('input[name="eng-radio"]');
+  radios.forEach(function(r) {
+    r.checked = parseInt(r.value) === parseInt(currentEngId);
   });
+  // If none matched, check "None"
+  if (!Array.from(radios).some(function(r) { return r.checked; })) {
+    document.getElementById('eng-none').checked = true;
+  }
   engineerModal.show();
 }
 
 document.getElementById('engineerSaveBtn').addEventListener('click', function() {
-  var ids = Array.from(document.querySelectorAll('.eng-checkbox:checked'))
-                 .map(function(cb) { return cb.value; });
+  var checked = document.querySelector('input[name="eng-radio"]:checked');
+  var engId   = checked ? checked.value : '0';
 
   var formData = new FormData();
-  ids.forEach(function(id) { formData.append('engineer_ids', id); });
+  if (engId !== '0') formData.append('engineer_ids', engId);
 
   fetch('/api/warranty/' + currentWarrantyId + '/set-engineers', {
     method: 'POST',
@@ -342,13 +347,12 @@ document.getElementById('engineerSaveBtn').addEventListener('click', function() 
     if (data.success) {
       var container = document.getElementById('eng-avatars-' + currentWarrantyId);
       if (container) {
-        var shown = data.engineers.slice(0, 3);
-        var extra = data.engineers.length - 3;
-        var html  = shown.map(function(e) {
-          return '<span class="avatar-xs" title="' + e.name + '">' + e.initials + '</span>';
-        }).join('');
-        if (extra > 0) html += '<span class="avatar-xs text-muted">+' + extra + '</span>';
-        container.innerHTML = html;
+        var eng = data.engineers[0];
+        if (eng) {
+          container.innerHTML = '<span class="avatar-xs eng-avatar-clickable" title="' + eng.name + '">' + eng.initials + '</span>';
+        } else {
+          container.innerHTML = '<span class="avatar-xs eng-avatar-empty" title="Assign engineer">—</span>';
+        }
       }
       engineerModal.hide();
     }
