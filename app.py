@@ -13,8 +13,6 @@ from urllib.parse import urlparse, urlunparse
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
 
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, jsonify, abort, send_file)
@@ -985,6 +983,8 @@ def dashboard_download():
 
     warranties = query.all()
 
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Warranties'
