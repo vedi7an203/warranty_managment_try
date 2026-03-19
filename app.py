@@ -7,13 +7,14 @@ import json
 import re
 import secrets
 import string
+from io import BytesIO
 from functools import wraps
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
 from flask import (Flask, render_template, request, redirect, url_for,
-                   flash, jsonify, abort)
+                   flash, jsonify, abort, send_file)
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
                          login_required, current_user)
@@ -126,14 +127,14 @@ class ClosureDecision:
     ]
     LABELS = dict(CHOICES)
     COLORS = {
-        ACCEPTED:           'success',
+        ACCEPTED:           'danger',
         PARTIALLY_ACCEPTED: 'warning',
-        REJECTED:           'danger',
+        REJECTED:           'success',
     }
     HEX = {
-        ACCEPTED:           '#198754',
+        ACCEPTED:           '#dc3545',
         PARTIALLY_ACCEPTED: '#ffc107',
-        REJECTED:           '#dc3545',
+        REJECTED:           '#198754',
     }
 
 
@@ -309,6 +310,37 @@ class Warranty(db.Model):
                         Warranty.id != self.id)
                 .count())
 
+    @property
+    def total_occurrence_count(self):
+        """Total warranties for same P/N + S/N including this one."""
+        return (Warranty.query
+                .filter(Warranty.lru_part_number == self.lru_part_number,
+                        Warranty.lru_serial_number == self.lru_serial_number)
+                .count())
+
+    @property
+    def short_status_label(self):
+        """Abbreviated status label for display."""
+        if self.status == WarrantyStatus.CLOSED and self.closure_decision:
+            short = {
+                ClosureDecision.ACCEPTED:           'Accepted',
+                ClosureDecision.PARTIALLY_ACCEPTED: 'Partial',
+                ClosureDecision.REJECTED:           'Reject',
+            }.get(self.closure_decision, self.closure_decision_label)
+            return f"Closed — {short}"
+        return self.status_label
+
+    @property
+    def adjudication_days(self):
+        """Days from adjudication start to closure (if closed) or today."""
+        if not self.adjudication_start_date:
+            return None
+        if self.status == WarrantyStatus.CLOSED and self.closed_at:
+            end = self.closed_at.date()
+        else:
+            end = date.today()
+        return (end - self.adjudication_start_date).days
+
     def __repr__(self):
         return f'<Warranty {self.warranty_number}>'
 
@@ -437,23 +469,25 @@ def logout():
 @app.route('/')
 @login_required
 def dashboard():
-    status      = request.args.get('status', '')
-    engineer_id = request.args.get('engineer', '')
-    part_number = request.args.get('pn', '')
-    customer_id = request.args.get('customer', '')
-    search      = request.args.get('search', '')
-    sort        = request.args.get('sort', 'newest')
+    status_list   = request.args.getlist('status')
+    engineer_id   = request.args.get('engineer', '')
+    pn_list       = request.args.getlist('pn')
+    customer_list = request.args.getlist('customer')
+    search        = request.args.get('search', '')
+    sort          = request.args.get('sort', 'newest')
 
     query = Warranty.query
 
-    if status:
-        query = query.filter(Warranty.status == status)
+    if status_list:
+        query = query.filter(Warranty.status.in_(status_list))
     if engineer_id:
         query = query.filter(Warranty.engineers.any(User.id == int(engineer_id)))
-    if part_number:
-        query = query.filter(Warranty.lru_part_number.ilike(f'%{part_number}%'))
-    if customer_id:
-        query = query.filter(Warranty.customer_id == int(customer_id))
+    if pn_list:
+        query = query.filter(Warranty.lru_part_number.in_(pn_list))
+    if customer_list:
+        cids = [int(c) for c in customer_list if c]
+        if cids:
+            query = query.filter(Warranty.customer_id.in_(cids))
     if search:
         query = query.filter(db.or_(
             Warranty.warranty_number.ilike(f'%{search}%'),
@@ -479,13 +513,24 @@ def dashboard():
         'closed':      Warranty.query.filter_by(status=WarrantyStatus.CLOSED).count(),
     }
 
+    all_part_numbers = [r[0] for r in
+                        db.session.query(Warranty.lru_part_number).distinct()
+                        .order_by(Warranty.lru_part_number).all()]
+
     return render_template('dashboard.html',
         warranties=warranties,
         stats=stats,
         engineers=User.query.filter_by(is_active=True).order_by(User.last_name).all(),
         customers=Customer.query.filter_by(is_active=True).order_by(Customer.name).all(),
-        filters={'status': status, 'engineer': engineer_id, 'pn': part_number,
-                 'customer': customer_id, 'search': search, 'sort': sort},
+        all_part_numbers=all_part_numbers,
+        filters={
+            'status':   status_list,
+            'engineer': engineer_id,
+            'pn':       pn_list,
+            'customer': customer_list,
+            'search':   search,
+            'sort':     sort,
+        },
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -739,6 +784,133 @@ def manage_engineer(warranty_id):
         flash('No change made.', 'info')
 
     return redirect(url_for('warranty_detail', warranty_id=warranty_id))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WARRANTY — SET ENGINEERS (AJAX)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/api/warranty/<int:warranty_id>/set-engineers', methods=['POST'])
+@login_required
+def api_set_engineers(warranty_id):
+    w = Warranty.query.get_or_404(warranty_id)
+    new_ids = set(int(x) for x in request.form.getlist('engineer_ids') if x)
+    old_ids = set(e.id for e in w.engineers)
+
+    for eng in list(w.engineers):
+        if eng.id not in new_ids:
+            w.engineers.remove(eng)
+            log_activity(w, ActivityType.ENGINEER_REMOVED,
+                comment=f'{eng.full_name} removed from this warranty.')
+
+    for eid in new_ids - old_ids:
+        eng = User.query.get(eid)
+        if eng:
+            w.engineers.append(eng)
+            log_activity(w, ActivityType.ENGINEER_ASSIGNED,
+                comment=f'{eng.full_name} assigned to this warranty.')
+
+    w.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(success=True, engineers=[
+        {'id': e.id, 'name': e.full_name, 'initials': e.initials}
+        for e in w.engineers
+    ])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DASHBOARD — EXCEL DOWNLOAD
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/dashboard/download')
+@login_required
+def dashboard_download():
+    status_list   = request.args.getlist('status')
+    engineer_id   = request.args.get('engineer', '')
+    pn_list       = request.args.getlist('pn')
+    customer_list = request.args.getlist('customer')
+    search        = request.args.get('search', '')
+    sort          = request.args.get('sort', 'newest')
+
+    query = Warranty.query
+    if status_list:
+        query = query.filter(Warranty.status.in_(status_list))
+    if engineer_id:
+        query = query.filter(Warranty.engineers.any(User.id == int(engineer_id)))
+    if pn_list:
+        query = query.filter(Warranty.lru_part_number.in_(pn_list))
+    if customer_list:
+        cids = [int(c) for c in customer_list if c]
+        if cids:
+            query = query.filter(Warranty.customer_id.in_(cids))
+    if search:
+        query = query.filter(db.or_(
+            Warranty.warranty_number.ilike(f'%{search}%'),
+            Warranty.lru_part_number.ilike(f'%{search}%'),
+            Warranty.lru_serial_number.ilike(f'%{search}%'),
+            Warranty.observed_defect.ilike(f'%{search}%'),
+        ))
+    if sort == 'oldest':
+        query = query.order_by(Warranty.created_at.asc())
+    elif sort == 'updated':
+        query = query.order_by(Warranty.updated_at.desc())
+    else:
+        query = query.order_by(Warranty.created_at.desc())
+
+    warranties = query.all()
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Warranties'
+
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(fill_type='solid', fgColor='1a3a5c')
+
+    headers = [
+        'Warranty #', 'Status', 'LRU Part Number', 'Serial Number',
+        'Customer', 'Observed Defect', 'TSI (h)', 'TSO (h)',
+        'Flight Cycles', 'Adj. Start Date', 'Engineers',
+        'Adj. Time (days)', 'Created At', 'Updated At',
+    ]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+
+    for w in warranties:
+        ws.append([
+            w.warranty_number,
+            w.short_status_label,
+            w.lru_part_number,
+            w.lru_serial_number,
+            w.customer.name if w.customer else '',
+            w.observed_defect,
+            w.tsi,
+            w.tso,
+            w.flight_cycles_since_installation,
+            w.adjudication_start_date.strftime('%Y-%m-%d') if w.adjudication_start_date else '',
+            ', '.join(e.full_name for e in w.engineers),
+            w.adjudication_days,
+            w.created_at.strftime('%Y-%m-%d %H:%M') if w.created_at else '',
+            w.updated_at.strftime('%Y-%m-%d %H:%M') if w.updated_at else '',
+        ])
+
+    col_widths = [18, 22, 20, 16, 22, 50, 10, 10, 12, 14, 30, 14, 17, 17]
+    for i, width in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f'warranties_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    return send_file(
+        output, as_attachment=True, download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATISTICS
