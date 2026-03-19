@@ -486,6 +486,44 @@ def allowed_report_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPORT_EXTENSIONS
 
 # ─────────────────────────────────────────────────────────────────────────────
+# API — AUTOCOMPLETE SEARCH ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/api/lru-parts/search')
+@login_required
+def api_lru_parts_search():
+    q = request.args.get('q', '').strip().upper()
+    query = LRUPart.query.filter_by(is_active=True)
+    if q:
+        query = query.filter(LRUPart.part_number.ilike(f'{q}%'))
+    parts = query.order_by(LRUPart.part_number).limit(20).all()
+    return jsonify([{
+        'part_number': p.part_number,
+        'ata_chapter':  p.ata_chapter or '',
+        'description':  p.description,
+    } for p in parts])
+
+
+@app.route('/api/customers/search')
+@login_required
+def api_customers_search():
+    q = request.args.get('q', '').strip()
+    query = Customer.query.filter_by(is_active=True)
+    if q:
+        query = query.filter(
+            db.or_(
+                Customer.name.ilike(f'{q}%'),
+                Customer.code.ilike(f'{q}%'),
+            )
+        )
+    customers = query.order_by(Customer.name).limit(20).all()
+    return jsonify([{
+        'id':   c.id,
+        'name': c.name,
+        'code': c.code,
+    } for c in customers])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # AUTH ROUTES
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/login', methods=['GET', 'POST'])
@@ -601,6 +639,10 @@ def warranty_new():
                                        engineers=engineers, today=date.today().isoformat())
             if not validate_mco(former_mco_raw):
                 flash('Former MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_new.html', customers=customers,
+                                       engineers=engineers, today=date.today().isoformat())
+            if int(current_mco_raw) <= int(former_mco_raw):
+                flash('Current MCO must be strictly greater than Former MCO.', 'danger')
                 return render_template('warranty_new.html', customers=customers,
                                        engineers=engineers, today=date.today().isoformat())
             w = Warranty(
