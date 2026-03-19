@@ -8,9 +8,6 @@ from io import BytesIO
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
-
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, jsonify, abort, send_file)
 from flask_sqlalchemy import SQLAlchemy
@@ -36,7 +33,6 @@ login_manager.login_message_category = 'warning'
 # Créer les tables automatiquement au démarrage
 with app.app_context():
     db.create_all()
-    init_db_cmd()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -807,6 +803,9 @@ def dashboard_download():
         query = query.order_by(Warranty.created_at.desc())
 
     warranties = query.all()
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
 
     wb = openpyxl.Workbook()
     ws = wb.active
