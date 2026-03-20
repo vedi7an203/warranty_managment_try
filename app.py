@@ -94,17 +94,16 @@ def _init_db():
             u.set_password('Engineer1!')
             db.session.add(u)
 
-    for code, name, email, country in [
-        ('AIR_FR',    'Air France',       'warranty@airfrance.fr',        'France'),
-        ('LUFTH',     'Lufthansa Technik','warranty@lufthansa-technik.de', 'Germany'),
-        ('EMIRATES',  'Emirates',         'mro@emirates.com',              'UAE'),
-        ('BRIT_AW',   'British Airways',  'techops@ba.com',                'UK'),
-        ('RYANAIR',   'Ryanair',          'mro@ryanair.com',               'Ireland'),
-        ('EASYJET',   'easyJet',          'engineering@easyjet.com',       'UK'),
+    for code, name in [
+        ('AIR_FR',   'Air France'),
+        ('LUFTH',    'Lufthansa Technik'),
+        ('EMIRATES', 'Emirates'),
+        ('BRIT_AW',  'British Airways'),
+        ('RYANAIR',  'Ryanair'),
+        ('EASYJET',  'easyJet'),
     ]:
         if not Customer.query.filter_by(code=code).first():
-            db.session.add(Customer(code=code, name=name,
-                                    contact_email=email, country=country))
+            db.session.add(Customer(code=code, name=name))
 
     db.session.commit()
 
@@ -215,13 +214,11 @@ class User(UserMixin, db.Model):
 
 
 class Customer(db.Model):
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(200), nullable=False)
-    code          = db.Column(db.String(20),  unique=True, nullable=False)
-    contact_email = db.Column(db.String(120))
-    country       = db.Column(db.String(100))
-    is_active     = db.Column(db.Boolean, default=True)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)
+    code       = db.Column(db.String(20),  unique=True, nullable=False)
+    is_active  = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     warranties = db.relationship('Warranty', backref='customer', lazy='dynamic')
 
@@ -1349,9 +1346,7 @@ def admin_customer_new():
     if Customer.query.filter_by(code=code).first():
         flash(f'Customer code "{code}" already exists.', 'danger')
         return redirect(url_for('admin_panel', tab='customers'))
-    c = Customer(name=request.form['name'].strip(), code=code,
-                 contact_email=request.form.get('contact_email', '').strip() or None,
-                 country=request.form.get('country', '').strip() or None)
+    c = Customer(name=request.form['name'].strip(), code=code)
     db.session.add(c)
     db.session.commit()
     flash(f'Customer {c.name} ({c.code}) created.', 'success')
@@ -1368,12 +1363,74 @@ def admin_customer_edit(cid):
     if conflict:
         flash(f'Code "{new_code}" already in use.', 'danger')
         return redirect(url_for('admin_panel', tab='customers'))
-    c.name          = request.form['name'].strip()
-    c.code          = new_code
-    c.contact_email = request.form.get('contact_email', '').strip() or None
-    c.country       = request.form.get('country', '').strip() or None
+    c.name = request.form['name'].strip()
+    c.code = new_code
     db.session.commit()
     flash(f'Customer {c.name} updated.', 'success')
+    return redirect(url_for('admin_panel', tab='customers'))
+
+
+@app.route('/admin/customers/import-excel', methods=['POST'])
+@login_required
+@admin_required
+def admin_customer_import_excel():
+    """Import customers from an Excel file.
+
+    Expected columns (order matters, header row is skipped):
+      A – Customer Name  (required)
+      B – Code           (required, unique key)
+    """
+    import openpyxl
+
+    f = request.files.get('excel_file')
+    if not f or f.filename == '':
+        flash('No file selected.', 'warning')
+        return redirect(url_for('admin_panel', tab='customers'))
+    if not f.filename.lower().endswith(('.xlsx', '.xls')):
+        flash('Only .xlsx / .xls files are accepted.', 'danger')
+        return redirect(url_for('admin_panel', tab='customers'))
+
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        created = updated = skipped = 0
+        errors = []
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not row or all(v is None for v in row):
+                continue
+
+            name = str(row[0]).strip()               if row[0] is not None else ''
+            code = str(row[1]).strip().upper()        if len(row) > 1 and row[1] is not None else ''
+
+            if not name:
+                errors.append(f'Row {row_idx}: Customer Name is empty — skipped.')
+                skipped += 1
+                continue
+            if not code:
+                errors.append(f'Row {row_idx}: Code is empty for "{name}" — skipped.')
+                skipped += 1
+                continue
+
+            existing = Customer.query.filter_by(code=code).first()
+            if existing:
+                existing.name = name
+                updated += 1
+            else:
+                db.session.add(Customer(name=name, code=code))
+                created += 1
+
+        db.session.commit()
+        wb.close()
+
+        flash(f'Import complete — {created} created, {updated} updated, {skipped} skipped.', 'success')
+        for e in errors[:10]:
+            flash(e, 'warning')
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error reading Excel file: {exc}', 'danger')
+
     return redirect(url_for('admin_panel', tab='customers'))
 
 

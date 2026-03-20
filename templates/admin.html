@@ -261,9 +261,14 @@
     <input type="text" id="customerSearch" class="form-control form-control-sm"
            placeholder="&#128269; Search customers…" style="max-width:260px"
            autofocus>
-    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
-      <i class="fa-solid fa-plus me-1"></i>Add Customer
-    </button>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#importCustomerModal">
+        <i class="fa-solid fa-file-excel me-1"></i>Import Excel
+      </button>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+        <i class="fa-solid fa-plus me-1"></i>Add Customer
+      </button>
+    </div>
   </div>
 
   <div class="table-responsive">
@@ -272,8 +277,6 @@
         <tr>
           <th>Company Name</th>
           <th>Code</th>
-          <th>Contact Email</th>
-          <th>Country</th>
           <th class="text-center">Warranties</th>
           <th class="text-center">Status</th>
           <th class="text-end">Actions</th>
@@ -284,8 +287,6 @@
         <tr class="{% if not c.is_active %}table-secondary{% endif %}">
           <td><strong>{{ c.name }}</strong></td>
           <td><code class="small">{{ c.code }}</code></td>
-          <td class="small">{{ c.contact_email or '—' }}</td>
-          <td class="small">{{ c.country or '—' }}</td>
           <td class="text-center">
             <span class="badge bg-light text-dark border">{{ c.warranties.count() }}</span>
           </td>
@@ -302,9 +303,7 @@
                       data-bs-toggle="modal" data-bs-target="#editCustomerModal"
                       data-cid="{{ c.id }}"
                       data-name="{{ c.name }}"
-                      data-code="{{ c.code }}"
-                      data-email="{{ c.contact_email or '' }}"
-                      data-country="{{ c.country or '' }}">
+                      data-code="{{ c.code }}">
                 <i class="fa-solid fa-pen"></i>
               </button>
               <form method="post" action="{{ url_for('admin_toggle_customer', cid=c.id) }}" class="d-inline">
@@ -335,21 +334,13 @@
         <div class="modal-body">
           <div class="row g-2">
             <div class="col-8">
-              <label class="form-label small mb-1">Company Name</label>
+              <label class="form-label small mb-1">Company Name <span class="text-danger">*</span></label>
               <input name="name" class="form-control form-control-sm" required>
             </div>
             <div class="col-4">
-              <label class="form-label small mb-1">Code</label>
+              <label class="form-label small mb-1">Code <span class="text-danger">*</span></label>
               <input name="code" class="form-control form-control-sm" required
                      placeholder="e.g. AIR01" style="text-transform:uppercase">
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1">Contact Email</label>
-              <input name="contact_email" type="email" class="form-control form-control-sm">
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1">Country</label>
-              <input name="country" class="form-control form-control-sm">
             </div>
           </div>
         </div>
@@ -376,21 +367,13 @@
         <div class="modal-body">
           <div class="row g-2">
             <div class="col-8">
-              <label class="form-label small mb-1">Company Name</label>
+              <label class="form-label small mb-1">Company Name <span class="text-danger">*</span></label>
               <input name="name" id="ec_name" class="form-control form-control-sm" required>
             </div>
             <div class="col-4">
-              <label class="form-label small mb-1">Code</label>
+              <label class="form-label small mb-1">Code <span class="text-danger">*</span></label>
               <input name="code" id="ec_code" class="form-control form-control-sm" required
                      style="text-transform:uppercase">
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1">Contact Email</label>
-              <input name="contact_email" id="ec_email" type="email" class="form-control form-control-sm">
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1">Country</label>
-              <input name="country" id="ec_country" class="form-control form-control-sm">
             </div>
           </div>
         </div>
@@ -398,6 +381,51 @@
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="fa-solid fa-floppy-disk me-1"></i>Save
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- ── Import Excel Customers Modal ── -->
+<div class="modal fade" id="importCustomerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('admin_customer_import_excel') }}" enctype="multipart/form-data">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-file-excel me-2"></i>Import Customers from Excel</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            The file must be <strong>.xlsx</strong> with the following columns (header row is skipped):
+          </p>
+          <table class="table table-bordered table-sm small mb-3">
+            <thead class="table-light">
+              <tr><th>Column A</th><th>Column B</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Customer Name</strong> <span class="text-danger">*</span></td>
+                <td><strong>Code</strong> <span class="text-danger">*</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="small text-info mb-3">
+            <i class="fa-solid fa-circle-info me-1"></i>
+            If a Code already exists it will be <strong>updated</strong> with the new name.
+            New codes will be <strong>created</strong>.
+          </p>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Excel file <span class="text-danger">*</span></label>
+            <input type="file" name="excel_file" class="form-control form-control-sm"
+                   accept=".xlsx,.xls" required>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="fa-solid fa-upload me-1"></i>Import
           </button>
         </div>
       </div>
@@ -645,10 +673,8 @@ if (editCustomerModal) {
   editCustomerModal.addEventListener('show.bs.modal', function (e) {
     const b = e.relatedTarget;
     document.getElementById('editCustomerForm').action = '/admin/customers/' + b.dataset.cid + '/edit';
-    document.getElementById('ec_name').value    = b.dataset.name;
-    document.getElementById('ec_code').value    = b.dataset.code;
-    document.getElementById('ec_email').value   = b.dataset.email;
-    document.getElementById('ec_country').value = b.dataset.country;
+    document.getElementById('ec_name').value = b.dataset.name;
+    document.getElementById('ec_code').value = b.dataset.code;
   });
 }
 
