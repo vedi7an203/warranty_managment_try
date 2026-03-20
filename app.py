@@ -1134,12 +1134,21 @@ def api_statistics():
         q = q.filter(Warranty.lru_part_number.in_(part_numbers))
     warranties = q.all()
 
-    # ── Monthly trend (last 18 months)
+    # ── Monthly trend (last 18 months) — count by creation date
     monthly = defaultdict(int)
     for w in warranties:
         monthly[w.created_at.strftime('%Y-%m')] += 1
+
+    # ── Average closure time per month (grouped by closed_at date)
+    closure_days = defaultdict(list)
+    for w in warranties:
+        if w.status == WarrantyStatus.CLOSED and w.closed_at and w.adjudication_start_date:
+            days = (w.closed_at.date() - w.adjudication_start_date).days
+            if days >= 0:
+                closure_days[w.closed_at.strftime('%Y-%m')].append(days)
+
     now = datetime.utcnow()
-    m_labels, m_data = [], []
+    m_labels, m_data, m_avg_closure = [], [], []
     for i in range(17, -1, -1):
         yr, mo = divmod(now.month - 1 - i, 12)
         yr = now.year + yr
@@ -1147,6 +1156,8 @@ def api_statistics():
         key = f'{yr}-{mo:02d}'
         m_labels.append(datetime(yr, mo, 1).strftime('%b %y'))
         m_data.append(monthly.get(key, 0))
+        days_list = closure_days.get(key, [])
+        m_avg_closure.append(round(sum(days_list) / len(days_list), 1) if days_list else None)
 
     # ── By status
     status_labels = [v for _, v in WarrantyStatus.CHOICES]
@@ -1190,7 +1201,7 @@ def api_statistics():
                 if n_closed else 0)
 
     return jsonify(
-        monthly      = {'labels': m_labels,   'data': m_data},
+        monthly      = {'labels': m_labels, 'data': m_data, 'avg_closure': m_avg_closure},
         by_status    = {'labels': status_labels, 'data': status_data, 'colors': status_colors},
         by_decision  = {'labels': dec_labels,  'data': dec_data,   'colors': dec_colors},
         top_parts    = {'labels': [p[0] for p in top_pns],  'data': [p[1] for p in top_pns]},
