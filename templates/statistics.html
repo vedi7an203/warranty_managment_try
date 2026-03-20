@@ -3,6 +3,54 @@
 
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+/* ── Multi-select dropdown ─────────────────────────────── */
+.ms-wrapper { position: relative; }
+.ms-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .25rem .5rem; border: 1px solid #dee2e6; border-radius: .375rem;
+  background: #fff; cursor: pointer; font-size: .875rem; min-height: 31px;
+  user-select: none;
+}
+.ms-trigger:hover { border-color: #86b7fe; }
+.ms-trigger .ms-badge {
+  display: inline-block; background: #0d6efd; color: #fff;
+  border-radius: 10px; padding: 0 6px; font-size: .7rem; margin-left: 4px;
+}
+.ms-dropdown {
+  display: none; position: absolute; z-index: 1050; top: calc(100% + 2px); left: 0;
+  min-width: 100%; max-width: 320px; background: #fff;
+  border: 1px solid #dee2e6; border-radius: .375rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+}
+.ms-dropdown.open { display: block; }
+.ms-dropdown .ms-search {
+  padding: 6px 8px; border-bottom: 1px solid #dee2e6;
+}
+.ms-dropdown .ms-search input {
+  width: 100%; border: 1px solid #dee2e6; border-radius: .25rem;
+  padding: 3px 7px; font-size: .8rem; outline: none;
+}
+.ms-dropdown .ms-search input:focus { border-color: #86b7fe; }
+.ms-options {
+  max-height: 210px; overflow-y: auto; padding: 4px 0;
+}
+.ms-options label {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 10px; font-size: .82rem; cursor: pointer; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ms-options label:hover { background: #f0f4ff; }
+.ms-options label.hidden { display: none; }
+.ms-footer {
+  padding: 5px 10px; border-top: 1px solid #dee2e6;
+  display: flex; gap: 6px;
+}
+.ms-footer button {
+  font-size: .75rem; padding: 1px 8px;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -19,15 +67,40 @@
       <div class="col-auto">
         <span class="filter-label d-block"><i class="fa-solid fa-filter me-1"></i>Filters</span>
       </div>
+
+      <!-- ── Customer multi-select ── -->
       <div class="col-6 col-md-3 col-xl-2">
         <label class="filter-label">Customer</label>
-        <select id="f_customer" class="form-select form-select-sm">
-          <option value="">All customers</option>
-          {% for c in customers %}
-          <option value="{{ c.id }}">{{ c.name }}</option>
-          {% endfor %}
-        </select>
+        <div class="ms-wrapper" id="ms_customer">
+          <div class="ms-trigger" onclick="msToggle('customer')">
+            <span class="ms-label">All customers</span>
+            <i class="fa-solid fa-chevron-down fa-xs ms-1 text-muted"></i>
+          </div>
+          <div class="ms-dropdown" id="ms_customer_dd">
+            <div class="ms-search">
+              <input type="text" placeholder="&#128269; Search…"
+                     oninput="msFilter('customer', this.value)">
+            </div>
+            <div class="ms-options" id="ms_customer_opts">
+              {% for c in customers %}
+              <label>
+                <input type="checkbox" class="ms-cb" value="{{ c.id }}"
+                       onchange="msChanged('customer')">
+                {{ c.name }}
+              </label>
+              {% endfor %}
+            </div>
+            <div class="ms-footer">
+              <button class="btn btn-sm btn-link p-0 text-primary"
+                      onclick="msSelectAll('customer')">All</button>
+              <button class="btn btn-sm btn-link p-0 text-secondary"
+                      onclick="msClearAll('customer')">None</button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- ── Engineer single select ── -->
       <div class="col-6 col-md-3 col-xl-2">
         <label class="filter-label">Engineer</label>
         <select id="f_engineer" class="form-select form-select-sm">
@@ -37,15 +110,39 @@
           {% endfor %}
         </select>
       </div>
+
+      <!-- ── Part Number multi-select ── -->
       <div class="col-6 col-md-3 col-xl-2">
         <label class="filter-label">Part Number</label>
-        <select id="f_part" class="form-select form-select-sm">
-          <option value="">All P/Ns</option>
-          {% for pn in part_numbers %}
-          <option value="{{ pn }}">{{ pn }}</option>
-          {% endfor %}
-        </select>
+        <div class="ms-wrapper" id="ms_part">
+          <div class="ms-trigger" onclick="msToggle('part')">
+            <span class="ms-label">All P/Ns</span>
+            <i class="fa-solid fa-chevron-down fa-xs ms-1 text-muted"></i>
+          </div>
+          <div class="ms-dropdown" id="ms_part_dd">
+            <div class="ms-search">
+              <input type="text" placeholder="&#128269; Search…"
+                     oninput="msFilter('part', this.value)">
+            </div>
+            <div class="ms-options" id="ms_part_opts">
+              {% for pn in part_numbers %}
+              <label>
+                <input type="checkbox" class="ms-cb" value="{{ pn }}"
+                       onchange="msChanged('part')">
+                {{ pn }}
+              </label>
+              {% endfor %}
+            </div>
+            <div class="ms-footer">
+              <button class="btn btn-sm btn-link p-0 text-primary"
+                      onclick="msSelectAll('part')">All</button>
+              <button class="btn btn-sm btn-link p-0 text-secondary"
+                      onclick="msClearAll('part')">None</button>
+            </div>
+          </div>
+        </div>
       </div>
+
       <div class="col-auto">
         <button onclick="loadStats()" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-refresh me-1"></i>Refresh
@@ -169,6 +266,9 @@
 
 {% block scripts %}
 <script>
+// Register datalabels plugin globally
+Chart.register(ChartDataLabels);
+
 const PALETTE = [
   '#0d6efd','#fd7e14','#6f42c1','#198754','#dc3545',
   '#ffc107','#0dcaf0','#6c757d','#20c997','#d63384',
@@ -180,6 +280,7 @@ function destroyChart(id) {
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
 }
 
+/* ── Bar chart with value labels on each bar ── */
 function makeBar(id, labels, data, colors, horizontal=false) {
   destroyChart(id);
   const ctx = document.getElementById(id);
@@ -192,28 +293,57 @@ function makeBar(id, labels, data, colors, horizontal=false) {
     },
     options: {
       indexAxis: horizontal ? 'y' : 'x',
-      plugins: { legend: { display: false } },
-      scales: { x: { grid: { display: !horizontal } },
-                y: { grid: { display: horizontal } } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: horizontal ? 'end' : 'end',
+          align: horizontal ? 'end' : 'top',
+          color: '#333',
+          font: { size: 11, weight: 'bold' },
+          formatter: v => v === 0 ? '' : v,
+        }
+      },
+      scales: {
+        x: { grid: { display: !horizontal },
+             ticks: { font: { size: 11 } } },
+        y: { grid: { display: horizontal },
+             ticks: { font: { size: 11 } } },
+      },
       responsive: true,
+      layout: { padding: { top: horizontal ? 0 : 18, right: horizontal ? 28 : 0 } },
     }
   });
 }
 
+/* ── Doughnut with count + % labels ── */
 function makeDoughnut(id, labels, data, colors) {
   destroyChart(id);
+  const total = data.reduce((a, b) => a + b, 0);
   charts[id] = new Chart(document.getElementById(id), {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: colors || PALETTE,
                                   borderWidth: 2, hoverOffset: 6 }] },
     options: {
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
-      cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        datalabels: {
+          color: '#fff',
+          font: { size: 11, weight: 'bold' },
+          textAlign: 'center',
+          formatter: (v, ctx) => {
+            if (v === 0) return '';
+            const pct = total > 0 ? Math.round(v / total * 100) : 0;
+            return v + '\n' + pct + '%';
+          },
+        }
+      },
+      cutout: '55%',
       responsive: true,
     }
   });
 }
 
+/* ── Line/bar for monthly trend ── */
 function makeLine(id, labels, data) {
   destroyChart(id);
   charts[id] = new Chart(document.getElementById(id), {
@@ -231,36 +361,102 @@ function makeLine(id, labels, data) {
       }]
     },
     options: {
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'top',
+          color: '#0d6efd',
+          font: { size: 10, weight: 'bold' },
+          formatter: v => v === 0 ? '' : v,
+        }
+      },
       scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } } },
+        x: { ticks: { font: { size: 11 } } },
       },
       responsive: true,
+      layout: { padding: { top: 18 } },
     }
   });
 }
 
-function loadStats() {
-  const params = new URLSearchParams({
-    customer_id: document.getElementById('f_customer').value,
-    engineer_id: document.getElementById('f_engineer').value,
-    part_number: document.getElementById('f_part').value,
+/* ═══════════════════════════════════════
+   Multi-select helpers
+═══════════════════════════════════════ */
+function msToggle(key) {
+  const dd = document.getElementById('ms_' + key + '_dd');
+  const isOpen = dd.classList.contains('open');
+  // close all open dropdowns first
+  document.querySelectorAll('.ms-dropdown.open').forEach(el => el.classList.remove('open'));
+  if (!isOpen) dd.classList.add('open');
+}
+
+function msFilter(key, q) {
+  const opts = document.querySelectorAll('#ms_' + key + '_opts label');
+  const lq = q.toLowerCase();
+  opts.forEach(lbl => {
+    const txt = lbl.textContent.trim().toLowerCase();
+    lbl.classList.toggle('hidden', lq !== '' && !txt.includes(lq));
   });
+}
+
+function msGetSelected(key) {
+  return [...document.querySelectorAll('#ms_' + key + '_opts .ms-cb:checked')]
+           .map(cb => cb.value);
+}
+
+function msChanged(key) {
+  const sel = msGetSelected(key);
+  const trigger = document.querySelector('#ms_' + key + ' .ms-label');
+  if (sel.length === 0) {
+    trigger.innerHTML = key === 'customer' ? 'All customers' : 'All P/Ns';
+  } else {
+    trigger.innerHTML = sel.length + ' selected'
+      + ' <span class="ms-badge">' + sel.length + '</span>';
+  }
+  loadStats();
+}
+
+function msSelectAll(key) {
+  document.querySelectorAll('#ms_' + key + '_opts .ms-cb').forEach(cb => {
+    if (!cb.closest('label').classList.contains('hidden')) cb.checked = true;
+  });
+  msChanged(key);
+}
+
+function msClearAll(key) {
+  document.querySelectorAll('#ms_' + key + '_opts .ms-cb').forEach(cb => cb.checked = false);
+  msChanged(key);
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ms-wrapper')) {
+    document.querySelectorAll('.ms-dropdown.open').forEach(el => el.classList.remove('open'));
+  }
+});
+
+/* ═══════════════════════════════════════
+   Load statistics
+═══════════════════════════════════════ */
+function loadStats() {
+  const params = new URLSearchParams();
+  msGetSelected('customer').forEach(v => params.append('customer_ids', v));
+  params.set('engineer_id', document.getElementById('f_engineer').value);
+  msGetSelected('part').forEach(v => params.append('part_numbers', v));
 
   fetch('/api/statistics?' + params.toString())
     .then(r => r.json())
     .then(d => {
-      // KPIs
-      document.getElementById('kpi_total').textContent = d.kpi.total;
-      document.getElementById('kpi_open').textContent  = d.kpi.open;
-      document.getElementById('kpi_closed').textContent= d.kpi.closed;
-      document.getElementById('kpi_acc').textContent   = d.kpi.acc_rate + '%';
+      document.getElementById('kpi_total').textContent  = d.kpi.total;
+      document.getElementById('kpi_open').textContent   = d.kpi.open;
+      document.getElementById('kpi_closed').textContent = d.kpi.closed;
+      document.getElementById('kpi_acc').textContent    = d.kpi.acc_rate + '%';
 
-      // Charts
-      makeLine('monthlyChart', d.monthly.labels, d.monthly.data);
+      makeLine('monthlyChart',    d.monthly.labels,      d.monthly.data);
       makeDoughnut('statusChart',   d.by_status.labels,   d.by_status.data,   d.by_status.colors);
       makeDoughnut('decisionChart', d.by_decision.labels, d.by_decision.data, d.by_decision.colors);
-      makeBar('partsChart',    d.top_parts.labels,   d.top_parts.data,   null, true);
+      makeBar('partsChart',    d.top_parts.labels,   d.top_parts.data,   null,               true);
       makeBar('customerChart', d.by_customer.labels, d.by_customer.data, PALETTE.slice(2));
       makeBar('engineerChart', d.by_engineer.labels, d.by_engineer.data, PALETTE.slice(4));
     })
@@ -268,18 +464,13 @@ function loadStats() {
 }
 
 function clearFilters() {
-  document.getElementById('f_customer').value = '';
+  msClearAll('customer');
+  msClearAll('part');
   document.getElementById('f_engineer').value = '';
-  document.getElementById('f_part').value = '';
   loadStats();
 }
 
-// Auto-load on page ready
 document.addEventListener('DOMContentLoaded', loadStats);
-
-// Auto-reload on filter change
-['f_customer','f_engineer','f_part'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadStats);
-});
+document.getElementById('f_engineer').addEventListener('change', loadStats);
 </script>
 {% endblock %}

@@ -1121,17 +1121,17 @@ def statistics():
 @app.route('/api/statistics')
 @login_required
 def api_statistics():
-    customer_id = request.args.get('customer_id', '')
-    engineer_id = request.args.get('engineer_id', '')
-    part_number = request.args.get('part_number', '')
+    customer_ids = request.args.getlist('customer_ids')
+    engineer_id  = request.args.get('engineer_id', '')
+    part_numbers = request.args.getlist('part_numbers')
 
     q = Warranty.query
-    if customer_id:
-        q = q.filter(Warranty.customer_id == int(customer_id))
+    if customer_ids:
+        q = q.filter(Warranty.customer_id.in_([int(x) for x in customer_ids if x]))
     if engineer_id:
         q = q.filter(Warranty.engineers.any(User.id == int(engineer_id)))
-    if part_number:
-        q = q.filter(Warranty.lru_part_number == part_number)
+    if part_numbers:
+        q = q.filter(Warranty.lru_part_number.in_(part_numbers))
     warranties = q.all()
 
     # ── Monthly trend (last 18 months)
