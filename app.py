@@ -1455,6 +1455,78 @@ def admin_lru_toggle(pid):
     return redirect(url_for('admin_panel', tab='lru_parts'))
 
 
+@app.route('/admin/lru-parts/import-excel', methods=['POST'])
+@login_required
+@admin_required
+def admin_lru_import_excel():
+    """Import LRU parts from an Excel file.
+
+    Expected columns (order matters, header row is skipped):
+      A – Part Number   (required)
+      B – ATA Chapter   (optional)
+      C – Description   (required)
+    """
+    import openpyxl
+
+    f = request.files.get('excel_file')
+    if not f or f.filename == '':
+        flash('No file selected.', 'warning')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    if not f.filename.lower().endswith(('.xlsx', '.xls')):
+        flash('Only .xlsx / .xls files are accepted.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        created = updated = skipped = 0
+        errors = []
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not row or all(v is None for v in row):
+                continue  # skip blank rows
+
+            pn  = str(row[0]).strip().upper() if row[0] is not None else ''
+            ata = str(row[1]).strip().upper() if len(row) > 1 and row[1] is not None else ''
+            desc = str(row[2]).strip()         if len(row) > 2 and row[2] is not None else ''
+
+            if not pn:
+                errors.append(f'Row {row_idx}: Part Number is empty — skipped.')
+                skipped += 1
+                continue
+            if not desc:
+                errors.append(f'Row {row_idx}: Description is empty for {pn} — skipped.')
+                skipped += 1
+                continue
+
+            existing = LRUPart.query.filter_by(part_number=pn).first()
+            if existing:
+                existing.ata_chapter = ata or existing.ata_chapter
+                existing.description = desc
+                updated += 1
+            else:
+                db.session.add(LRUPart(
+                    part_number=pn,
+                    ata_chapter=ata or None,
+                    description=desc,
+                ))
+                created += 1
+
+        db.session.commit()
+        wb.close()
+
+        msg = f'Import complete — {created} created, {updated} updated, {skipped} skipped.'
+        flash(msg, 'success')
+        for e in errors[:10]:          # show up to 10 row-level errors
+            flash(e, 'warning')
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error reading Excel file: {exc}', 'danger')
+
+    return redirect(url_for('admin_panel', tab='lru_parts'))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI — DATABASE INIT & SEED
 # ─────────────────────────────────────────────────────────────────────────────
