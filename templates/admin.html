@@ -413,9 +413,14 @@
   <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
     <input type="text" id="lruSearch" class="form-control form-control-sm"
            placeholder="&#128269; Search LRU parts…" style="max-width:260px" autofocus>
-    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addLruModal">
-      <i class="fa-solid fa-plus me-1"></i>Add LRU Part
-    </button>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#importLruModal">
+        <i class="fa-solid fa-file-excel me-1"></i>Import Excel
+      </button>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addLruModal">
+        <i class="fa-solid fa-plus me-1"></i>Add LRU Part
+      </button>
+    </div>
   </div>
 
   <div class="table-responsive">
@@ -538,6 +543,52 @@
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="fa-solid fa-floppy-disk me-1"></i>Save
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- ── Import Excel Modal ── -->
+<div class="modal fade" id="importLruModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('admin_lru_import_excel') }}" enctype="multipart/form-data">
+      <div class="modal-content">
+        <div class="modal-header py-2">
+          <h6 class="modal-title"><i class="fa-solid fa-file-excel me-2"></i>Import LRU Parts from Excel</h6>
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            The file must be <strong>.xlsx</strong> with the following columns (header row is skipped):
+          </p>
+          <table class="table table-bordered table-sm small mb-3">
+            <thead class="table-light">
+              <tr><th>Column A</th><th>Column B</th><th>Column C</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Part Number</strong> <span class="text-danger">*</span></td>
+                <td>ATA Chapter <span class="text-muted">(optional)</span></td>
+                <td><strong>Description</strong> <span class="text-danger">*</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="small text-info mb-3">
+            <i class="fa-solid fa-circle-info me-1"></i>
+            If a Part Number already exists it will be <strong>updated</strong> with the new description/ATA.
+            New part numbers will be <strong>created</strong>.
+          </p>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Excel file <span class="text-danger">*</span></label>
+            <input type="file" name="excel_file" class="form-control form-control-sm"
+                   accept=".xlsx,.xls" required>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="fa-solid fa-upload me-1"></i>Import
           </button>
         </div>
       </div>
