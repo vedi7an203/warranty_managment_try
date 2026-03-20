@@ -516,8 +516,8 @@ def api_customers_search():
     if q:
         query = query.filter(
             db.or_(
-                Customer.name.ilike(f'{q}%'),
-                Customer.code.ilike(f'{q}%'),
+                Customer.name.ilike(f'%{q}%'),
+                Customer.code.ilike(f'%{q}%'),
             )
         )
     customers = query.order_by(Customer.name).limit(20).all()
