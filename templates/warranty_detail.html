@@ -27,6 +27,7 @@
 
   <!-- Status badge (clickable → ouvre le modal) + Edit button -->
   <div class="text-end">
+    {% if user_can('can_change_status') %}
     <button type="button" class="status-hero status-hero-btn"
             style="--status-color: {{ w.status_hex }}"
             data-bs-toggle="modal" data-bs-target="#statusModal"
@@ -42,11 +43,32 @@
       </div>
       <i class="fa-solid fa-pen-to-square ms-2 status-edit-icon"></i>
     </button>
-    <div class="mt-2">
+    {% else %}
+    <div class="status-hero" style="--status-color: {{ w.status_hex }}; cursor:default">
+      <div class="status-dot"></div>
+      <div>
+        <div class="status-main">{{ w.effective_status_label }}</div>
+        {% if w.status == 'closed' and w.closed_at %}
+        <div class="status-sub">Closed {{ w.closed_at|fdate }}</div>
+        {% else %}
+        <div class="status-sub">Since {{ w.adjudication_start_date|fdate }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="mt-2 d-flex gap-2 justify-content-end flex-wrap">
+      {% if user_can('can_edit_warranty') %}
       <a href="{{ url_for('warranty_edit', warranty_id=w.id) }}"
          class="btn btn-sm btn-outline-secondary">
         <i class="fa-solid fa-pen me-1"></i>Edit
       </a>
+      {% endif %}
+      {% if user_can('can_create_ticket') %}
+      <a href="{{ url_for('ticket_new') }}?type=engineering_support&warranty_id={{ w.id }}"
+         class="btn btn-sm btn-outline-primary">
+        <i class="fa-solid fa-ticket me-1"></i>Open Ticket
+      </a>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -285,10 +307,12 @@
     <div class="card info-card mb-3">
       <div class="card-header info-header d-flex justify-content-between align-items-center">
         <span><i class="fa-solid fa-users-gear me-2 text-primary"></i>Assigned Engineers</span>
+        {% if user_can('can_edit_warranty') %}
         <button class="btn btn-xs btn-outline-primary" data-bs-toggle="collapse"
                 data-bs-target="#addEngPanel">
           <i class="fa-solid fa-user-plus"></i>
         </button>
+        {% endif %}
       </div>
       <div class="card-body">
         {% if w.engineers %}
@@ -302,6 +326,7 @@
                 <div class="tiny text-muted">{{ eng.email }}</div>
               </div>
             </div>
+            {% if user_can('can_edit_warranty') %}
             <form method="POST" action="{{ url_for('manage_engineer', warranty_id=w.id) }}">
               <input type="hidden" name="engineer_id" value="{{ eng.id }}"/>
               <input type="hidden" name="action" value="remove"/>
@@ -310,6 +335,7 @@
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </form>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -317,6 +343,7 @@
         <p class="text-muted small mb-2">No engineers assigned yet.</p>
         {% endif %}
 
+        {% if user_can('can_edit_warranty') %}
         <!-- Add engineer panel -->
         <div class="collapse" id="addEngPanel">
           <hr class="my-2">
@@ -336,6 +363,7 @@
           {% endif %}
           {% endfor %}
         </div>
+        {% endif %}
       </div>
     </div>
 

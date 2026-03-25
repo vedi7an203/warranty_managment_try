@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Tickets — WAM{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet"/>
+<style>
+  .ts-wrapper.multi .ts-control { min-height: 31px; padding: 2px 6px; }
+  .ts-wrapper .ts-control, .ts-dropdown { font-size: .8125rem; }
+  .ticket-row { cursor: pointer; }
+  .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">
+    <i class="fa-solid fa-ticket me-2 text-primary"></i>Engineering Tickets
+  </h5>
+  {% if user_can('can_create_ticket') %}
+  <a href="{{ url_for('ticket_new') }}" class="btn btn-sm btn-primary">
+    <i class="fa-solid fa-plus me-1"></i>New Ticket
+  </a>
+  {% endif %}
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+  {% set cards = [
+    ('Total',          t_stats.total,       'fa-layer-group',       'kpi-total',       url_for('ticket_list')),
+    ('Open',           t_stats.open,        'fa-folder-open',       'kpi-open',        url_for('ticket_list', status='open')),
+    ('In Progress',    t_stats.in_progress, 'fa-circle-half-stroke','kpi-workshop',    url_for('ticket_list', status='in_progress')),
+    ('Pending Review', t_stats.pending,     'fa-hourglass-half',    'kpi-engineering', url_for('ticket_list', status='pending_review')),
+    ('Closed',         t_stats.closed,      'fa-lock',              'kpi-closed',      url_for('ticket_list', status='closed')),
+  ] %}
+  {% for label, count, icon, cls, href in cards %}
+  <div class="col-6 col-md-4 col-xl">
+    <a href="{{ href }}" class="text-decoration-none">
+      <div class="card kpi-card {{ cls }} h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="kpi-icon"><i class="fa-solid {{ icon }}"></i></div>
+          <div>
+            <div class="kpi-value">{{ count }}</div>
+            <div class="kpi-label">{{ label }}</div>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Filter Bar -->
+<div class="card filter-card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" action="{{ url_for('ticket_list') }}" id="filterForm">
+      <div class="row g-2 align-items-end">
+
+        <div class="col-12 col-md-3 col-xl-3">
+          <label class="filter-label">Search</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" name="search" class="form-control"
+                   placeholder="Ticket #, title…" value="{{ filters.search }}"/>
+          </div>
+        </div>
+
+        <div class="col-6 col-md-2 col-xl-2">
+          <label class="filter-label">Status</label>
+          <select name="status" id="statusFilter" multiple placeholder="All">
+            {% for val, lbl in TicketStatus.CHOICES %}
+            <option value="{{ val }}" {{ 'selected' if val in filters.status }}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2 col-xl-2">
+          <label class="filter-label">Type</label>
+          <select name="type" id="typeFilter" multiple placeholder="All">
+            {% for val, lbl in TicketType.CHOICES %}
+            <option value="{{ val }}" {{ 'selected' if val in filters.type }}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2 col-xl-2">
+          <label class="filter-label">Priority</label>
+          <select name="priority" id="priorityFilter" multiple placeholder="All">
+            {% for val, lbl in TicketPriority.CHOICES %}
+            <option value="{{ val }}" {{ 'selected' if val in filters.priority }}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1 col-xl-1">
+          <label class="filter-label">Sort</label>
+          <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="newest"   {{ 'selected' if filters.sort == 'newest'   }}>Updated</option>
+            <option value="oldest"   {{ 'selected' if filters.sort == 'oldest'   }}>Oldest</option>
+            <option value="priority" {{ 'selected' if filters.sort == 'priority' }}>Priority</option>
+          </select>
+        </div>
+
+        <div class="col-auto d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-filter me-1"></i>Filter
+          </button>
+          <a href="{{ url_for('ticket_list') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-xmark"></i>
+          </a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <span class="text-muted small">
+    <strong>{{ tickets|length }}</strong> ticket{{ 's' if tickets|length != 1 }}
+  </span>
+</div>
+
+{% if tickets %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light small text-uppercase text-muted">
+        <tr>
+          <th>Ticket #</th>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Customer</th>
+          <th>Created By</th>
+          <th>Assigned To</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr class="ticket-row" onclick="window.location='{{ url_for('ticket_detail', ticket_id=t.id) }}'">
+          <td class="font-monospace fw-bold small">{{ t.ticket_number }}</td>
+          <td>
+            <span class="badge small" style="background:{{ TicketType.COLORS.get(t.ticket_type,'#6c757d') }}">
+              <i class="fa-solid {{ t.type_icon }} me-1"></i>{{ t.type_label }}
+            </span>
+          </td>
+          <td>
+            <span class="small">{{ t.title[:70] }}{{ '…' if t.title|length > 70 }}</span>
+          </td>
+          <td>
+            <span class="badge bg-{{ t.priority_color }} small">{{ t.priority_label }}</span>
+          </td>
+          <td>
+            <span class="badge bg-{{ t.status_color }} small">{{ t.status_label }}</span>
+          </td>
+          <td class="small">{{ t.customer.name if t.customer else '—' }}</td>
+          <td class="small">{{ t.created_by_user.full_name if t.created_by_user else '—' }}</td>
+          <td class="small">{{ t.assigned_to_user.full_name if t.assigned_to_user else '—' }}</td>
+          <td class="small text-muted">{{ t.updated_at|fdate }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5">
+  <i class="fa-solid fa-inbox fa-3x text-muted mb-3 d-block"></i>
+  <h5 class="text-muted">No tickets found</h5>
+  {% if user_can('can_create_ticket') %}
+  <a href="{{ url_for('ticket_new') }}" class="btn btn-primary mt-2">
+    <i class="fa-solid fa-plus me-1"></i>Create first ticket
+  </a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+['statusFilter', 'typeFilter', 'priorityFilter'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) new TomSelect(el, { plugins: ['remove_button'], closeAfterSelect: false });
+});
+</script>
+{% endblock %}
