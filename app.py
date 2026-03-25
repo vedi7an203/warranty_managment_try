@@ -3,8 +3,8 @@ Warranty Adjudication Management System
 Aerospace Part 145 MRO Company
 """
 import os
-import json
 import re
+import json
 import secrets
 import string
 from io import BytesIO
@@ -12,6 +12,7 @@ from functools import wraps
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime, date, timedelta
 from collections import defaultdict
+
 
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, jsonify, abort, send_file)
@@ -58,36 +59,88 @@ def _init_db():
     """Create tables and seed reference data (called at startup and via CLI)."""
     db.create_all()
 
+    # Add columns introduced after initial deployment (safe if already present)
+    with db.engine.connect() as conn:
+        for tbl, col, col_type in [
+            ('warranty', 'technical_report_filename', 'VARCHAR(255)'),
+            ('warranty', 'technical_report_stored',   'VARCHAR(255)'),
+            # Migrate old role values to new role names
+        ]:
+            exists = conn.execute(db.text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name=:tbl AND column_name=:col"
+            ), {'tbl': tbl, 'col': col}).fetchone()
+            if not exists:
+                conn.execute(db.text(
+                    f'ALTER TABLE {tbl} ADD COLUMN {col} {col_type}'
+                ))
+
+        # Migrate legacy roles: engineer → engineering, viewer → quality
+        for old_role, new_role in [('engineer', 'engineering'), ('viewer', 'quality')]:
+            conn.execute(db.text(
+                "UPDATE \"user\" SET role=:new WHERE role=:old"
+            ), {'new': new_role, 'old': old_role})
+
+        conn.commit()
+
     if not User.query.filter_by(username='admin').first():
         admin = User(username='admin', email='admin@mro.aero',
-                     first_name='Admin', last_name='User', role='admin')
+                     first_name='Admin', last_name='User', role=UserRole.ADMIN)
         admin.set_password('Admin123!')
         db.session.add(admin)
 
-    for uname, email, fn, ln in [
-        ('j.smith',   'j.smith@mro.aero',   'James',  'Smith'),
-        ('m.wilson',  'm.wilson@mro.aero',  'Marie',  'Wilson'),
-        ('s.martin',  's.martin@mro.aero',  'Sophie', 'Martin'),
-        ('r.johnson', 'r.johnson@mro.aero', 'Robert', 'Johnson'),
-        ('p.dubois',  'p.dubois@mro.aero',  'Pierre', 'Dubois'),
-    ]:
+    # Seed one user per role for demo purposes
+    demo_users = [
+        ('j.smith',   'j.smith@mro.aero',   'James',   'Smith',   UserRole.ENGINEERING),
+        ('m.wilson',  'm.wilson@mro.aero',  'Marie',   'Wilson',  UserRole.ENGINEERING),
+        ('s.martin',  's.martin@mro.aero',  'Sophie',  'Martin',  UserRole.CUSTOMER_SUPPORT),
+        ('r.johnson', 'r.johnson@mro.aero', 'Robert',  'Johnson', UserRole.WORKSHOP_MANAGER),
+        ('p.dubois',  'p.dubois@mro.aero',  'Pierre',  'Dubois',  UserRole.SUPPLY_CHAIN),
+        ('a.leblanc', 'a.leblanc@mro.aero', 'Alice',   'Leblanc', UserRole.QUALITY),
+    ]
+    for uname, email, fn, ln, role in demo_users:
         if not User.query.filter_by(username=uname).first():
-            u = User(username=uname, email=email, first_name=fn,
-                     last_name=ln, role='engineer')
+            u = User(username=uname, email=email, first_name=fn, last_name=ln, role=role)
             u.set_password('Engineer1!')
             db.session.add(u)
 
-    for code, name, email, country in [
-        ('AIR_FR',    'Air France',       'warranty@airfrance.fr',        'France'),
-        ('LUFTH',     'Lufthansa Technik','warranty@lufthansa-technik.de', 'Germany'),
-        ('EMIRATES',  'Emirates',         'mro@emirates.com',              'UAE'),
-        ('BRIT_AW',   'British Airways',  'techops@ba.com',                'UK'),
-        ('RYANAIR',   'Ryanair',          'mro@ryanair.com',               'Ireland'),
-        ('EASYJET',   'easyJet',          'engineering@easyjet.com',       'UK'),
+    for code, name in [
+        ('AIR_FR',   'Air France'),
+        ('LUFTH',    'Lufthansa Technik'),
+        ('EMIRATES', 'Emirates'),
+        ('BRIT_AW',  'British Airways'),
+        ('RYANAIR',  'Ryanair'),
+        ('EASYJET',  'easyJet'),
     ]:
         if not Customer.query.filter_by(code=code).first():
-            db.session.add(Customer(code=code, name=name,
-                                    contact_email=email, country=country))
+            db.session.add(Customer(code=code, name=name))
+
+    # Seed default UserTypeConfig for each role
+    default_configs = {
+        UserRole.ENGINEERING:      dict(can_create_warranty=True,  can_edit_warranty=True,
+                                        can_change_status=True,    can_view_statistics=True,
+                                        can_export=True,           can_create_ticket=True,
+                                        can_view_all_tickets=True),
+        UserRole.CUSTOMER_SUPPORT: dict(can_create_warranty=True,  can_edit_warranty=False,
+                                        can_change_status=False,   can_view_statistics=False,
+                                        can_export=False,          can_create_ticket=True,
+                                        can_view_all_tickets=False),
+        UserRole.WORKSHOP_MANAGER: dict(can_create_warranty=False, can_edit_warranty=False,
+                                        can_change_status=True,    can_view_statistics=False,
+                                        can_export=False,          can_create_ticket=False,
+                                        can_view_all_tickets=False),
+        UserRole.SUPPLY_CHAIN:     dict(can_create_warranty=False, can_edit_warranty=False,
+                                        can_change_status=False,   can_view_statistics=False,
+                                        can_export=True,           can_create_ticket=True,
+                                        can_view_all_tickets=False),
+        UserRole.QUALITY:          dict(can_create_warranty=False, can_edit_warranty=False,
+                                        can_change_status=False,   can_view_statistics=True,
+                                        can_export=True,           can_create_ticket=True,
+                                        can_view_all_tickets=True),
+    }
+    for role, cfg in default_configs.items():
+        if not UserTypeConfig.query.filter_by(user_type=role).first():
+            db.session.add(UserTypeConfig(user_type=role, **cfg))
 
     db.session.commit()
 
@@ -95,28 +148,116 @@ def _init_db():
 # CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 class WarrantyStatus:
-    OPEN         = 'open'
-    WORKSHOP     = 'workshop'
-    ENGINEERING  = 'engineering'
-    CLOSED       = 'closed'
+    OPEN        = 'open'
+    IN_PROGRESS = 'in_progress'
+    CLOSED      = 'closed'
     CHOICES = [
         (OPEN,        'Open'),
-        (WORKSHOP,    'Under Workshop Investigation'),
-        (ENGINEERING, 'Under Engineering Review'),
+        (IN_PROGRESS, 'In Progress'),
         (CLOSED,      'Closed'),
     ]
     LABELS = dict(CHOICES)
     COLORS = {
         OPEN:        'primary',
-        WORKSHOP:    'warning',
-        ENGINEERING: 'purple',
+        IN_PROGRESS: 'warning',
         CLOSED:      'secondary',
     }
     HEX = {
         OPEN:        '#0d6efd',
-        WORKSHOP:    '#fd7e14',
-        ENGINEERING: '#6f42c1',
+        IN_PROGRESS: '#fd7e14',
         CLOSED:      '#6c757d',
+    }
+
+
+class UserRole:
+    ADMIN            = 'admin'
+    ENGINEERING      = 'engineering'
+    CUSTOMER_SUPPORT = 'customer_support'
+    WORKSHOP_MANAGER = 'workshop_manager'
+    SUPPLY_CHAIN     = 'supply_chain'
+    QUALITY          = 'quality'
+    CHOICES = [
+        (ADMIN,            'Administrator'),
+        (ENGINEERING,      'Engineering'),
+        (CUSTOMER_SUPPORT, 'Customer Support'),
+        (WORKSHOP_MANAGER, 'Workshop Manager'),
+        (SUPPLY_CHAIN,     'Supply Chain'),
+        (QUALITY,          'Quality'),
+    ]
+    LABELS = dict(CHOICES)
+    BADGE_COLORS = {
+        ADMIN:            'danger',
+        ENGINEERING:      'primary',
+        CUSTOMER_SUPPORT: 'success',
+        WORKSHOP_MANAGER: 'warning',
+        SUPPLY_CHAIN:     'info',
+        QUALITY:          'purple',
+    }
+
+
+class TicketType:
+    WARRANTY       = 'warranty'
+    ENG_SUPPORT    = 'engineering_support'
+    SUPPLY_CHAIN   = 'supply_chain'
+    QUALITY_REPORT = 'quality_report'
+    CHOICES = [
+        (WARRANTY,       'Warranty Case'),
+        (ENG_SUPPORT,    'Engineering Support'),
+        (SUPPLY_CHAIN,   'Supply Chain Request'),
+        (QUALITY_REPORT, 'Quality Report'),
+    ]
+    LABELS = dict(CHOICES)
+    ICONS = {
+        WARRANTY:       'fa-shield-halved',
+        ENG_SUPPORT:    'fa-screwdriver-wrench',
+        SUPPLY_CHAIN:   'fa-truck',
+        QUALITY_REPORT: 'fa-clipboard-check',
+    }
+    COLORS = {
+        WARRANTY:       '#0d6efd',
+        ENG_SUPPORT:    '#6f42c1',
+        SUPPLY_CHAIN:   '#0dcaf0',
+        QUALITY_REPORT: '#198754',
+    }
+
+
+class TicketPriority:
+    LOW      = 'low'
+    MEDIUM   = 'medium'
+    HIGH     = 'high'
+    CRITICAL = 'critical'
+    CHOICES = [
+        (LOW,      'Low'),
+        (MEDIUM,   'Medium'),
+        (HIGH,     'High'),
+        (CRITICAL, 'Critical'),
+    ]
+    LABELS = dict(CHOICES)
+    BADGE_COLORS = {
+        LOW:      'success',
+        MEDIUM:   'info',
+        HIGH:     'warning',
+        CRITICAL: 'danger',
+    }
+
+
+class TicketStatus:
+    OPEN           = 'open'
+    IN_PROGRESS    = 'in_progress'
+    PENDING_REVIEW = 'pending_review'
+    CLOSED         = 'closed'
+    CHOICES = [
+        (OPEN,           'Open'),
+        (IN_PROGRESS,    'In Progress'),
+        (PENDING_REVIEW, 'Pending Review'),
+        (CLOSED,         'Closed'),
+    ]
+    LABELS = dict(CHOICES)
+    COLORS = {
+        OPEN:           'primary',
+        IN_PROGRESS:    'warning',
+        PENDING_REVIEW: 'info',
+        CLOSED:         'secondary',
     }
 
 
@@ -170,7 +311,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     first_name    = db.Column(db.String(80),  nullable=False)
     last_name     = db.Column(db.String(80),  nullable=False)
-    role          = db.Column(db.String(20),  default='engineer')   # admin | engineer | viewer
+    role          = db.Column(db.String(30),  default='engineering')  # admin | engineering | customer_support | workshop_manager | supply_chain | quality
     is_active     = db.Column(db.Boolean,     default=True)
     created_at    = db.Column(db.DateTime,    default=datetime.utcnow)
 
@@ -198,13 +339,11 @@ class User(UserMixin, db.Model):
 
 
 class Customer(db.Model):
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(200), nullable=False)
-    code          = db.Column(db.String(20),  unique=True, nullable=False)
-    contact_email = db.Column(db.String(120))
-    country       = db.Column(db.String(100))
-    is_active     = db.Column(db.Boolean, default=True)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)
+    code       = db.Column(db.String(20),  unique=True, nullable=False)
+    is_active  = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     warranties = db.relationship('Warranty', backref='customer', lazy='dynamic')
 
@@ -264,7 +403,7 @@ class Warranty(db.Model):
     engineers  = db.relationship('User', secondary=warranty_engineers,
                                  backref=db.backref('assigned_warranties', lazy='dynamic'))
     activities = db.relationship('WarrantyActivity', backref='warranty',
-                                 lazy='dynamic', order_by='WarrantyActivity.timestamp')
+                                 lazy='dynamic')
 
     # ── Helpers
     @staticmethod
@@ -312,6 +451,14 @@ class Warranty(db.Model):
                 .all())
 
     @property
+    def all_unit_warranties(self):
+        """All warranties for this serial number (including current), oldest first."""
+        return (Warranty.query
+                .filter(Warranty.lru_serial_number == self.lru_serial_number)
+                .order_by(Warranty.created_at.asc())
+                .all())
+
+    @property
     def previous_warranty_count(self):
         return (Warranty.query
                 .filter(Warranty.lru_serial_number == self.lru_serial_number,
@@ -319,12 +466,11 @@ class Warranty(db.Model):
                 .count())
 
     @property
-    def occurrence_number(self):
-        """Chronological rank of this warranty for same P/N + S/N (1 = first time seen)."""
+    def total_occurrence_count(self):
+        """Total number of warranties for same P/N + S/N including this one."""
         return (Warranty.query
                 .filter(Warranty.lru_part_number == self.lru_part_number,
-                        Warranty.lru_serial_number == self.lru_serial_number,
-                        Warranty.id <= self.id)
+                        Warranty.lru_serial_number == self.lru_serial_number)
                 .count())
 
     @property
@@ -404,6 +550,102 @@ class WarrantyActivity(db.Model):
             ActivityType.REOPENED:          'success',
         }.get(self.activity_type, 'secondary')
 
+
+class UserTypeConfig(db.Model):
+    """Per-role feature permissions configurable from the admin panel."""
+    __tablename__ = 'user_type_config'
+    id                    = db.Column(db.Integer, primary_key=True)
+    user_type             = db.Column(db.String(30), unique=True, nullable=False)
+    can_create_warranty   = db.Column(db.Boolean, default=False)
+    can_edit_warranty     = db.Column(db.Boolean, default=False)
+    can_change_status     = db.Column(db.Boolean, default=False)
+    can_view_statistics   = db.Column(db.Boolean, default=False)
+    can_export            = db.Column(db.Boolean, default=False)
+    can_create_ticket     = db.Column(db.Boolean, default=False)
+    can_view_all_tickets  = db.Column(db.Boolean, default=False)
+    updated_at            = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<UserTypeConfig {self.user_type}>'
+
+
+class EngTicket(db.Model):
+    """Engineering ticketing system — covers warranty dossiers and support requests."""
+    __tablename__ = 'eng_ticket'
+    id                  = db.Column(db.Integer, primary_key=True)
+    ticket_number       = db.Column(db.String(20), unique=True, nullable=False)
+    title               = db.Column(db.String(200), nullable=False)
+    description         = db.Column(db.Text, nullable=False)
+    ticket_type         = db.Column(db.String(30), nullable=False, default=TicketType.ENG_SUPPORT)
+    priority            = db.Column(db.String(20), nullable=False, default=TicketPriority.MEDIUM)
+    status              = db.Column(db.String(30), nullable=False, default=TicketStatus.OPEN)
+    customer_id         = db.Column(db.Integer, db.ForeignKey('customer.id'))
+    created_by_id       = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assigned_to_id      = db.Column(db.Integer, db.ForeignKey('user.id'))
+    related_warranty_id = db.Column(db.Integer, db.ForeignKey('warranty.id'))
+    resolution          = db.Column(db.Text)
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    closed_at           = db.Column(db.DateTime)
+
+    customer          = db.relationship('Customer', backref='tickets')
+    created_by_user   = db.relationship('User', foreign_keys=[created_by_id],  backref='tickets_created')
+    assigned_to_user  = db.relationship('User', foreign_keys=[assigned_to_id], backref='tickets_assigned')
+    related_warranty  = db.relationship('Warranty', backref='related_tickets')
+    comments          = db.relationship('EngTicketComment', backref='ticket',  lazy='dynamic',
+                                        order_by='EngTicketComment.timestamp.asc()')
+
+    @staticmethod
+    def generate_ticket_number():
+        year = datetime.utcnow().year
+        last = (EngTicket.query
+                .filter(EngTicket.ticket_number.like(f'TKT-{year}-%'))
+                .order_by(EngTicket.id.desc())
+                .first())
+        seq = (int(last.ticket_number.split('-')[-1]) + 1) if last else 1
+        return f'TKT-{year}-{seq:05d}'
+
+    @property
+    def status_label(self):
+        return TicketStatus.LABELS.get(self.status, self.status)
+
+    @property
+    def priority_label(self):
+        return TicketPriority.LABELS.get(self.priority, self.priority)
+
+    @property
+    def type_label(self):
+        return TicketType.LABELS.get(self.ticket_type, self.ticket_type)
+
+    @property
+    def type_icon(self):
+        return TicketType.ICONS.get(self.ticket_type, 'fa-ticket')
+
+    @property
+    def priority_color(self):
+        return TicketPriority.BADGE_COLORS.get(self.priority, 'secondary')
+
+    @property
+    def status_color(self):
+        return TicketStatus.COLORS.get(self.status, 'secondary')
+
+    def __repr__(self):
+        return f'<EngTicket {self.ticket_number}>'
+
+
+class EngTicketComment(db.Model):
+    """Comments / activity log for engineering tickets."""
+    __tablename__ = 'eng_ticket_comment'
+    id               = db.Column(db.Integer, primary_key=True)
+    ticket_id        = db.Column(db.Integer, db.ForeignKey('eng_ticket.id'), nullable=False)
+    user_id          = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    comment          = db.Column(db.Text, nullable=False)
+    is_status_change = db.Column(db.Boolean, default=False)
+    old_status       = db.Column(db.String(30))
+    new_status       = db.Column(db.String(30))
+    timestamp        = db.Column(db.DateTime, default=datetime.utcnow)
+    user             = db.relationship('User', backref='ticket_comments')
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LOGIN MANAGER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -412,12 +654,45 @@ def load_user(uid):
     return User.query.get(int(uid))
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PERMISSION HELPERS  (defined before jinja globals so they can be registered)
+# ─────────────────────────────────────────────────────────────────────────────
+def get_user_config(user=None):
+    """Return UserTypeConfig for the given user (or current_user)."""
+    from flask_login import current_user as _cu
+    u = user or _cu
+    if u.role == UserRole.ADMIN:
+        return UserTypeConfig(
+            user_type=UserRole.ADMIN,
+            can_create_warranty=True, can_edit_warranty=True,
+            can_change_status=True,   can_view_statistics=True,
+            can_export=True,          can_create_ticket=True,
+            can_view_all_tickets=True,
+        )
+    return UserTypeConfig.query.filter_by(user_type=u.role).first() or UserTypeConfig(user_type=u.role)
+
+
+def user_can(permission):
+    """Check if current_user has the given permission attribute."""
+    from flask_login import current_user as _cu
+    if _cu.role == UserRole.ADMIN:
+        return True
+    cfg = UserTypeConfig.query.filter_by(user_type=_cu.role).first()
+    return bool(getattr(cfg, permission, False)) if cfg else False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TEMPLATE GLOBALS / FILTERS
 # ─────────────────────────────────────────────────────────────────────────────
 app.jinja_env.globals.update(
     WarrantyStatus=WarrantyStatus,
     ClosureDecision=ClosureDecision,
     ActivityType=ActivityType,
+    UserRole=UserRole,
+    TicketType=TicketType,
+    TicketPriority=TicketPriority,
+    TicketStatus=TicketStatus,
+    user_can=user_can,
+    get_user_config=get_user_config,
     now=datetime.utcnow,
 )
 
@@ -468,6 +743,44 @@ def validate_mco(mco_str):
 
 def allowed_report_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_REPORT_EXTENSIONS
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API — AUTOCOMPLETE SEARCH ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/api/lru-parts/search')
+@login_required
+def api_lru_parts_search():
+    q = request.args.get('q', '').strip().upper()
+    query = LRUPart.query.filter_by(is_active=True)
+    if q:
+        query = query.filter(LRUPart.part_number.ilike(f'{q}%'))
+    parts = query.order_by(LRUPart.part_number).limit(20).all()
+    return jsonify([{
+        'part_number': p.part_number,
+        'ata_chapter':  p.ata_chapter or '',
+        'description':  p.description,
+    } for p in parts])
+
+
+@app.route('/api/customers/search')
+@login_required
+def api_customers_search():
+    q = request.args.get('q', '').strip()
+    query = Customer.query.filter_by(is_active=True)
+    if q:
+        query = query.filter(
+            db.or_(
+                Customer.name.ilike(f'%{q}%'),
+                Customer.code.ilike(f'%{q}%'),
+            )
+        )
+    customers = query.order_by(Customer.name).limit(20).all()
+    return jsonify([{
+        'id':   c.id,
+        'name': c.name,
+        'code': c.code,
+    } for c in customers])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AUTH ROUTES
@@ -541,10 +854,31 @@ def dashboard():
     stats = {
         'total':       Warranty.query.count(),
         'open':        Warranty.query.filter_by(status=WarrantyStatus.OPEN).count(),
-        'workshop':    Warranty.query.filter_by(status=WarrantyStatus.WORKSHOP).count(),
-        'engineering': Warranty.query.filter_by(status=WarrantyStatus.ENGINEERING).count(),
+        'in_progress': Warranty.query.filter_by(status=WarrantyStatus.IN_PROGRESS).count(),
         'closed':      Warranty.query.filter_by(status=WarrantyStatus.CLOSED).count(),
     }
+    ticket_stats = {
+        'total':   EngTicket.query.count(),
+        'open':    EngTicket.query.filter_by(status=TicketStatus.OPEN).count(),
+        'in_progress': EngTicket.query.filter_by(status=TicketStatus.IN_PROGRESS).count(),
+        'pending': EngTicket.query.filter_by(status=TicketStatus.PENDING_REVIEW).count(),
+        'closed':  EngTicket.query.filter_by(status=TicketStatus.CLOSED).count(),
+    }
+
+    # For non-engineering/admin roles, only show their own tickets
+    my_tickets_query = EngTicket.query
+    if current_user.role not in [UserRole.ADMIN, UserRole.ENGINEERING]:
+        if user_can('can_view_all_tickets'):
+            pass
+        else:
+            my_tickets_query = my_tickets_query.filter(
+                db.or_(EngTicket.created_by_id == current_user.id,
+                       EngTicket.assigned_to_id == current_user.id)
+            )
+    recent_tickets = (my_tickets_query
+                      .filter(EngTicket.status != TicketStatus.CLOSED)
+                      .order_by(EngTicket.updated_at.desc())
+                      .limit(5).all())
 
     all_part_numbers = [r[0] for r in
                         db.session.query(Warranty.lru_part_number).distinct()
@@ -553,7 +887,9 @@ def dashboard():
     return render_template('dashboard.html',
         warranties=warranties,
         stats=stats,
-        engineers=User.query.filter_by(is_active=True).order_by(User.last_name).all(),
+        ticket_stats=ticket_stats,
+        recent_tickets=recent_tickets,
+        engineers=User.query.filter(User.role.in_([UserRole.ENGINEERING]), User.is_active == True).order_by(User.last_name).all(),
         customers=Customer.query.filter_by(is_active=True).order_by(Customer.name).all(),
         all_part_numbers=all_part_numbers,
         filters={
@@ -572,8 +908,12 @@ def dashboard():
 @app.route('/warranty/new', methods=['GET', 'POST'])
 @login_required
 def warranty_new():
+    if not user_can('can_create_warranty'):
+        flash('You do not have permission to create warranty cases.', 'danger')
+        return redirect(url_for('dashboard'))
+
     customers = Customer.query.filter_by(is_active=True).order_by(Customer.name).all()
-    engineers = User.query.filter_by(is_active=True).order_by(User.last_name).all()
+    engineers = User.query.filter(User.role.in_([UserRole.ENGINEERING]), User.is_active == True).order_by(User.last_name).all()
 
     if request.method == 'POST':
         try:
@@ -585,6 +925,10 @@ def warranty_new():
                                        engineers=engineers, today=date.today().isoformat())
             if not validate_mco(former_mco_raw):
                 flash('Former MCO must be a 10-digit number starting with 5000 (e.g. 5000457741).', 'danger')
+                return render_template('warranty_new.html', customers=customers,
+                                       engineers=engineers, today=date.today().isoformat())
+            if int(current_mco_raw) <= int(former_mco_raw):
+                flash('Current MCO must be strictly greater than Former MCO.', 'danger')
                 return render_template('warranty_new.html', customers=customers,
                                        engineers=engineers, today=date.today().isoformat())
             w = Warranty(
@@ -606,6 +950,7 @@ def warranty_new():
                 tso                     = float(request.form['tso']) if request.form.get('tso') else None,
                 flight_cycles_since_installation = int(request.form['flight_cycles']) if request.form.get('flight_cycles') else None,
                 created_by_id           = current_user.id,
+                status                  = WarrantyStatus.OPEN,
             )
             db.session.add(w)
             db.session.flush()
@@ -647,8 +992,9 @@ def warranty_detail(warranty_id):
     return render_template('warranty_detail.html',
         w=w,
         activities=activities,
-        all_engineers=User.query.filter_by(is_active=True).order_by(User.last_name).all(),
+        all_engineers=User.query.filter(User.role.in_([UserRole.ENGINEERING]), User.is_active == True).order_by(User.last_name).all(),
         previous_warranties=w.previous_warranties,
+        all_unit_warranties=w.all_unit_warranties,
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -657,9 +1003,12 @@ def warranty_detail(warranty_id):
 @app.route('/warranty/<int:warranty_id>/edit', methods=['GET', 'POST'])
 @login_required
 def warranty_edit(warranty_id):
+    if not user_can('can_edit_warranty'):
+        flash('You do not have permission to edit warranty cases.', 'danger')
+        return redirect(url_for('warranty_detail', warranty_id=warranty_id))
     w = Warranty.query.get_or_404(warranty_id)
     customers = Customer.query.filter_by(is_active=True).order_by(Customer.name).all()
-    engineers = User.query.filter_by(is_active=True).order_by(User.last_name).all()
+    engineers = User.query.filter(User.role.in_([UserRole.ENGINEERING]), User.is_active == True).order_by(User.last_name).all()
 
     if request.method == 'POST':
         try:
@@ -985,7 +1334,6 @@ def dashboard_download():
 
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
-
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Warranties'
@@ -1044,6 +1392,10 @@ def dashboard_download():
 @app.route('/statistics')
 @login_required
 def statistics():
+    if not user_can('can_view_statistics'):
+        flash('You do not have access to the statistics page.', 'danger')
+        return redirect(url_for('dashboard'))
+    # original body below
     part_numbers = [r[0] for r in
                     db.session.query(Warranty.lru_part_number).distinct()
                     .order_by(Warranty.lru_part_number).all()]
@@ -1058,25 +1410,34 @@ def statistics():
 @app.route('/api/statistics')
 @login_required
 def api_statistics():
-    customer_id = request.args.get('customer_id', '')
-    engineer_id = request.args.get('engineer_id', '')
-    part_number = request.args.get('part_number', '')
+    customer_ids = request.args.getlist('customer_ids')
+    engineer_id  = request.args.get('engineer_id', '')
+    part_numbers = request.args.getlist('part_numbers')
 
     q = Warranty.query
-    if customer_id:
-        q = q.filter(Warranty.customer_id == int(customer_id))
+    if customer_ids:
+        q = q.filter(Warranty.customer_id.in_([int(x) for x in customer_ids if x]))
     if engineer_id:
         q = q.filter(Warranty.engineers.any(User.id == int(engineer_id)))
-    if part_number:
-        q = q.filter(Warranty.lru_part_number == part_number)
+    if part_numbers:
+        q = q.filter(Warranty.lru_part_number.in_(part_numbers))
     warranties = q.all()
 
-    # ── Monthly trend (last 18 months)
+    # ── Monthly trend (last 18 months) — count by creation date
     monthly = defaultdict(int)
     for w in warranties:
         monthly[w.created_at.strftime('%Y-%m')] += 1
+
+    # ── Average closure time per month (grouped by closed_at date)
+    closure_days = defaultdict(list)
+    for w in warranties:
+        if w.status == WarrantyStatus.CLOSED and w.closed_at and w.adjudication_start_date:
+            days = (w.closed_at.date() - w.adjudication_start_date).days
+            if days >= 0:
+                closure_days[w.closed_at.strftime('%Y-%m')].append(days)
+
     now = datetime.utcnow()
-    m_labels, m_data = [], []
+    m_labels, m_data, m_avg_closure = [], [], []
     for i in range(17, -1, -1):
         yr, mo = divmod(now.month - 1 - i, 12)
         yr = now.year + yr
@@ -1084,6 +1445,8 @@ def api_statistics():
         key = f'{yr}-{mo:02d}'
         m_labels.append(datetime(yr, mo, 1).strftime('%b %y'))
         m_data.append(monthly.get(key, 0))
+        days_list = closure_days.get(key, [])
+        m_avg_closure.append(round(sum(days_list) / len(days_list), 1) if days_list else None)
 
     # ── By status
     status_labels = [v for _, v in WarrantyStatus.CHOICES]
@@ -1127,7 +1490,7 @@ def api_statistics():
                 if n_closed else 0)
 
     return jsonify(
-        monthly      = {'labels': m_labels,   'data': m_data},
+        monthly      = {'labels': m_labels, 'data': m_data, 'avg_closure': m_avg_closure},
         by_status    = {'labels': status_labels, 'data': status_data, 'colors': status_colors},
         by_decision  = {'labels': dec_labels,  'data': dec_data,   'colors': dec_colors},
         top_parts    = {'labels': [p[0] for p in top_pns],  'data': [p[1] for p in top_pns]},
@@ -1157,8 +1520,48 @@ def admin_panel():
     users = User.query.order_by(User.last_name, User.first_name).all()
     customers = Customer.query.order_by(Customer.name).all()
     lru_parts = LRUPart.query.order_by(LRUPart.part_number).all()
+    user_type_configs = {
+        cfg.user_type: cfg for cfg in UserTypeConfig.query.all()
+    }
+    # Ensure all non-admin roles have a config entry
+    for role, _ in UserRole.CHOICES:
+        if role != UserRole.ADMIN and role not in user_type_configs:
+            cfg = UserTypeConfig(user_type=role)
+            db.session.add(cfg)
+            db.session.commit()
+            user_type_configs[role] = cfg
     return render_template('admin.html', users=users, customers=customers,
-                           lru_parts=lru_parts, tab=tab)
+                           lru_parts=lru_parts, tab=tab,
+                           user_type_configs=user_type_configs,
+                           UserRole=UserRole)
+
+
+@app.route('/admin/user-type-config', methods=['POST'])
+@login_required
+@admin_required
+def admin_user_type_config():
+    """Save user type permission configuration."""
+    role = request.form.get('user_type', '')
+    if role not in dict(UserRole.CHOICES) or role == UserRole.ADMIN:
+        flash('Invalid user type.', 'danger')
+        return redirect(url_for('admin_panel', tab='permissions'))
+
+    cfg = UserTypeConfig.query.filter_by(user_type=role).first()
+    if not cfg:
+        cfg = UserTypeConfig(user_type=role)
+        db.session.add(cfg)
+
+    cfg.can_create_warranty  = bool(request.form.get('can_create_warranty'))
+    cfg.can_edit_warranty    = bool(request.form.get('can_edit_warranty'))
+    cfg.can_change_status    = bool(request.form.get('can_change_status'))
+    cfg.can_view_statistics  = bool(request.form.get('can_view_statistics'))
+    cfg.can_export           = bool(request.form.get('can_export'))
+    cfg.can_create_ticket    = bool(request.form.get('can_create_ticket'))
+    cfg.can_view_all_tickets = bool(request.form.get('can_view_all_tickets'))
+    cfg.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'Permissions updated for {UserRole.LABELS.get(role, role)}.', 'success')
+    return redirect(url_for('admin_panel', tab='permissions'))
 
 
 @app.route('/admin/users/new', methods=['POST'])
@@ -1239,7 +1642,7 @@ def admin_toggle_user(uid):
 @admin_required
 def admin_transfer_warranties(uid):
     from_user = User.query.get_or_404(uid)
-    open_statuses = [WarrantyStatus.OPEN, WarrantyStatus.WORKSHOP, WarrantyStatus.ENGINEERING]
+    open_statuses = [WarrantyStatus.OPEN, WarrantyStatus.IN_PROGRESS]
     warranties = (Warranty.query
                   .filter(Warranty.created_by_id == from_user.id,
                           Warranty.status.in_(open_statuses))
@@ -1283,9 +1686,7 @@ def admin_customer_new():
     if Customer.query.filter_by(code=code).first():
         flash(f'Customer code "{code}" already exists.', 'danger')
         return redirect(url_for('admin_panel', tab='customers'))
-    c = Customer(name=request.form['name'].strip(), code=code,
-                 contact_email=request.form.get('contact_email', '').strip() or None,
-                 country=request.form.get('country', '').strip() or None)
+    c = Customer(name=request.form['name'].strip(), code=code)
     db.session.add(c)
     db.session.commit()
     flash(f'Customer {c.name} ({c.code}) created.', 'success')
@@ -1302,12 +1703,74 @@ def admin_customer_edit(cid):
     if conflict:
         flash(f'Code "{new_code}" already in use.', 'danger')
         return redirect(url_for('admin_panel', tab='customers'))
-    c.name          = request.form['name'].strip()
-    c.code          = new_code
-    c.contact_email = request.form.get('contact_email', '').strip() or None
-    c.country       = request.form.get('country', '').strip() or None
+    c.name = request.form['name'].strip()
+    c.code = new_code
     db.session.commit()
     flash(f'Customer {c.name} updated.', 'success')
+    return redirect(url_for('admin_panel', tab='customers'))
+
+
+@app.route('/admin/customers/import-excel', methods=['POST'])
+@login_required
+@admin_required
+def admin_customer_import_excel():
+    """Import customers from an Excel file.
+
+    Expected columns (order matters, header row is skipped):
+      A – Customer Name  (required)
+      B – Code           (required, unique key)
+    """
+    import openpyxl
+
+    f = request.files.get('excel_file')
+    if not f or f.filename == '':
+        flash('No file selected.', 'warning')
+        return redirect(url_for('admin_panel', tab='customers'))
+    if not f.filename.lower().endswith(('.xlsx', '.xls')):
+        flash('Only .xlsx / .xls files are accepted.', 'danger')
+        return redirect(url_for('admin_panel', tab='customers'))
+
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        created = updated = skipped = 0
+        errors = []
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not row or all(v is None for v in row):
+                continue
+
+            name = str(row[0]).strip()               if row[0] is not None else ''
+            code = str(row[1]).strip().upper()        if len(row) > 1 and row[1] is not None else ''
+
+            if not name:
+                errors.append(f'Row {row_idx}: Customer Name is empty — skipped.')
+                skipped += 1
+                continue
+            if not code:
+                errors.append(f'Row {row_idx}: Code is empty for "{name}" — skipped.')
+                skipped += 1
+                continue
+
+            existing = Customer.query.filter_by(code=code).first()
+            if existing:
+                existing.name = name
+                updated += 1
+            else:
+                db.session.add(Customer(name=name, code=code))
+                created += 1
+
+        db.session.commit()
+        wb.close()
+
+        flash(f'Import complete — {created} created, {updated} updated, {skipped} skipped.', 'success')
+        for e in errors[:10]:
+            flash(e, 'warning')
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error reading Excel file: {exc}', 'danger')
+
     return redirect(url_for('admin_panel', tab='customers'))
 
 
@@ -1389,6 +1852,318 @@ def admin_lru_toggle(pid):
     return redirect(url_for('admin_panel', tab='lru_parts'))
 
 
+@app.route('/admin/lru-parts/import-excel', methods=['POST'])
+@login_required
+@admin_required
+def admin_lru_import_excel():
+    """Import LRU parts from an Excel file.
+
+    Expected columns (order matters, header row is skipped):
+      A – Part Number   (required)
+      B – ATA Chapter   (optional)
+      C – Description   (required)
+    """
+    import openpyxl
+
+    f = request.files.get('excel_file')
+    if not f or f.filename == '':
+        flash('No file selected.', 'warning')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+    if not f.filename.lower().endswith(('.xlsx', '.xls')):
+        flash('Only .xlsx / .xls files are accepted.', 'danger')
+        return redirect(url_for('admin_panel', tab='lru_parts'))
+
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        created = updated = skipped = 0
+        errors = []
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not row or all(v is None for v in row):
+                continue  # skip blank rows
+
+            pn  = str(row[0]).strip().upper() if row[0] is not None else ''
+            ata = str(row[1]).strip().upper() if len(row) > 1 and row[1] is not None else ''
+            desc = str(row[2]).strip()         if len(row) > 2 and row[2] is not None else ''
+
+            if not pn:
+                errors.append(f'Row {row_idx}: Part Number is empty — skipped.')
+                skipped += 1
+                continue
+            if not desc:
+                errors.append(f'Row {row_idx}: Description is empty for {pn} — skipped.')
+                skipped += 1
+                continue
+
+            existing = LRUPart.query.filter_by(part_number=pn).first()
+            if existing:
+                existing.ata_chapter = ata or existing.ata_chapter
+                existing.description = desc
+                updated += 1
+            else:
+                db.session.add(LRUPart(
+                    part_number=pn,
+                    ata_chapter=ata or None,
+                    description=desc,
+                ))
+                created += 1
+
+        db.session.commit()
+        wb.close()
+
+        msg = f'Import complete — {created} created, {updated} updated, {skipped} skipped.'
+        flash(msg, 'success')
+        for e in errors[:10]:          # show up to 10 row-level errors
+            flash(e, 'warning')
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error reading Excel file: {exc}', 'danger')
+
+    return redirect(url_for('admin_panel', tab='lru_parts'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENGINEERING TICKETS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/tickets')
+@login_required
+def ticket_list():
+    """Ticket dashboard — filtered by role permissions."""
+    status_list  = request.args.getlist('status')
+    type_list    = request.args.getlist('type')
+    priority_list = request.args.getlist('priority')
+    search       = request.args.get('search', '')
+    sort         = request.args.get('sort', 'newest')
+
+    q = EngTicket.query
+
+    # Scope: only show own tickets unless can_view_all_tickets
+    if not user_can('can_view_all_tickets'):
+        q = q.filter(db.or_(
+            EngTicket.created_by_id  == current_user.id,
+            EngTicket.assigned_to_id == current_user.id,
+        ))
+
+    if status_list:
+        q = q.filter(EngTicket.status.in_(status_list))
+    if type_list:
+        q = q.filter(EngTicket.ticket_type.in_(type_list))
+    if priority_list:
+        q = q.filter(EngTicket.priority.in_(priority_list))
+    if search:
+        q = q.filter(db.or_(
+            EngTicket.ticket_number.ilike(f'%{search}%'),
+            EngTicket.title.ilike(f'%{search}%'),
+            EngTicket.description.ilike(f'%{search}%'),
+        ))
+
+    if sort == 'oldest':
+        q = q.order_by(EngTicket.created_at.asc())
+    elif sort == 'priority':
+        priority_order = db.case(
+            {TicketPriority.CRITICAL: 1, TicketPriority.HIGH: 2,
+             TicketPriority.MEDIUM: 3, TicketPriority.LOW: 4},
+            value=EngTicket.priority, else_=5,
+        )
+        q = q.order_by(priority_order, EngTicket.created_at.desc())
+    else:
+        q = q.order_by(EngTicket.updated_at.desc())
+
+    tickets = q.all()
+    t_stats = {
+        'total':   EngTicket.query.count(),
+        'open':    EngTicket.query.filter_by(status=TicketStatus.OPEN).count(),
+        'in_progress': EngTicket.query.filter_by(status=TicketStatus.IN_PROGRESS).count(),
+        'pending': EngTicket.query.filter_by(status=TicketStatus.PENDING_REVIEW).count(),
+        'closed':  EngTicket.query.filter_by(status=TicketStatus.CLOSED).count(),
+    }
+
+    return render_template('ticket_list.html',
+        tickets=tickets, t_stats=t_stats,
+        customers=Customer.query.filter_by(is_active=True).order_by(Customer.name).all(),
+        engineers=User.query.filter(User.role == UserRole.ENGINEERING, User.is_active == True).order_by(User.last_name).all(),
+        filters={'status': status_list, 'type': type_list, 'priority': priority_list,
+                 'search': search, 'sort': sort},
+    )
+
+
+@app.route('/ticket/new', methods=['GET', 'POST'])
+@login_required
+def ticket_new():
+    if not user_can('can_create_ticket'):
+        flash('You do not have permission to create tickets.', 'danger')
+        return redirect(url_for('ticket_list'))
+
+    customers = Customer.query.filter_by(is_active=True).order_by(Customer.name).all()
+    engineers = User.query.filter(User.role == UserRole.ENGINEERING, User.is_active == True).order_by(User.last_name).all()
+    # Determine which ticket types this user can create based on role
+    allowed_types = list(TicketType.CHOICES)
+    if current_user.role == UserRole.SUPPLY_CHAIN:
+        allowed_types = [(k, v) for k, v in TicketType.CHOICES if k == TicketType.SUPPLY_CHAIN]
+    elif current_user.role == UserRole.QUALITY:
+        allowed_types = [(k, v) for k, v in TicketType.CHOICES
+                         if k in (TicketType.QUALITY_REPORT, TicketType.ENG_SUPPORT)]
+    elif current_user.role == UserRole.CUSTOMER_SUPPORT:
+        allowed_types = [(k, v) for k, v in TicketType.CHOICES
+                         if k in (TicketType.ENG_SUPPORT, TicketType.WARRANTY)]
+
+    if request.method == 'POST':
+        try:
+            ticket_type = request.form.get('ticket_type', TicketType.ENG_SUPPORT)
+            priority    = request.form.get('priority', TicketPriority.MEDIUM)
+            title       = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+
+            if not title:
+                flash('Title is required.', 'danger')
+                return render_template('ticket_new.html', customers=customers,
+                                       engineers=engineers, allowed_types=allowed_types)
+            if not description:
+                flash('Description is required.', 'danger')
+                return render_template('ticket_new.html', customers=customers,
+                                       engineers=engineers, allowed_types=allowed_types)
+
+            customer_id_raw = request.form.get('customer_id', '')
+            assigned_to_raw = request.form.get('assigned_to_id', '')
+            warranty_id_raw = request.form.get('related_warranty_id', '')
+
+            t = EngTicket(
+                ticket_number       = EngTicket.generate_ticket_number(),
+                title               = title,
+                description         = description,
+                ticket_type         = ticket_type,
+                priority            = priority,
+                status              = TicketStatus.OPEN,
+                customer_id         = int(customer_id_raw) if customer_id_raw else None,
+                created_by_id       = current_user.id,
+                assigned_to_id      = int(assigned_to_raw) if assigned_to_raw else None,
+                related_warranty_id = int(warranty_id_raw) if warranty_id_raw else None,
+            )
+            db.session.add(t)
+            db.session.flush()
+
+            # Initial comment
+            db.session.add(EngTicketComment(
+                ticket_id  = t.id,
+                user_id    = current_user.id,
+                comment    = f'Ticket {t.ticket_number} opened: {title}',
+                is_status_change = True,
+                new_status = TicketStatus.OPEN,
+            ))
+            db.session.commit()
+            flash(f'Ticket <strong>{t.ticket_number}</strong> created.', 'success')
+            return redirect(url_for('ticket_detail', ticket_id=t.id))
+
+        except Exception as exc:
+            db.session.rollback()
+            flash(f'Error creating ticket: {exc}', 'danger')
+
+    # Pre-fill type from query param (e.g. ?type=warranty)
+    preselect_type = request.args.get('type', '')
+    # Prefill related warranty
+    preselect_warranty = request.args.get('warranty_id', '')
+    return render_template('ticket_new.html',
+        customers=customers, engineers=engineers, allowed_types=allowed_types,
+        preselect_type=preselect_type, preselect_warranty=preselect_warranty)
+
+
+@app.route('/ticket/<int:ticket_id>')
+@login_required
+def ticket_detail(ticket_id):
+    t = EngTicket.query.get_or_404(ticket_id)
+    # Access check: own ticket or can_view_all_tickets
+    if not user_can('can_view_all_tickets'):
+        if t.created_by_id != current_user.id and t.assigned_to_id != current_user.id:
+            abort(403)
+    comments = t.comments.order_by(EngTicketComment.timestamp.asc()).all()
+    engineers = User.query.filter(User.role == UserRole.ENGINEERING, User.is_active == True).order_by(User.last_name).all()
+    return render_template('ticket_detail.html',
+        t=t, comments=comments, engineers=engineers,
+        all_engineers=engineers,
+    )
+
+
+@app.route('/ticket/<int:ticket_id>/update-status', methods=['POST'])
+@login_required
+def ticket_update_status(ticket_id):
+    t = EngTicket.query.get_or_404(ticket_id)
+    new_status = request.form.get('status', '')
+    comment    = request.form.get('comment', '').strip()
+
+    if new_status not in dict(TicketStatus.CHOICES):
+        flash('Invalid status.', 'danger')
+        return redirect(url_for('ticket_detail', ticket_id=ticket_id))
+
+    # Permission: engineering/admin can change any ticket; others only their own
+    if current_user.role not in [UserRole.ADMIN, UserRole.ENGINEERING]:
+        if not user_can('can_change_status'):
+            flash('You do not have permission to change ticket status.', 'danger')
+            return redirect(url_for('ticket_detail', ticket_id=ticket_id))
+
+    old_status = t.status
+    t.status   = new_status
+    t.updated_at = datetime.utcnow()
+    if new_status == TicketStatus.CLOSED:
+        t.closed_at = datetime.utcnow()
+        resolution = request.form.get('resolution', '').strip()
+        if resolution:
+            t.resolution = resolution
+
+    db.session.add(EngTicketComment(
+        ticket_id  = t.id,
+        user_id    = current_user.id,
+        comment    = comment or f'Status changed to {TicketStatus.LABELS.get(new_status)}.',
+        is_status_change = True,
+        old_status = old_status,
+        new_status = new_status,
+    ))
+    db.session.commit()
+    flash(f'Status updated to <strong>{TicketStatus.LABELS.get(new_status)}</strong>.', 'success')
+    return redirect(url_for('ticket_detail', ticket_id=ticket_id))
+
+
+@app.route('/ticket/<int:ticket_id>/add-comment', methods=['POST'])
+@login_required
+def ticket_add_comment(ticket_id):
+    t       = EngTicket.query.get_or_404(ticket_id)
+    comment = request.form.get('comment', '').strip()
+    if not comment:
+        flash('Comment cannot be empty.', 'warning')
+    else:
+        db.session.add(EngTicketComment(
+            ticket_id = t.id,
+            user_id   = current_user.id,
+            comment   = comment,
+        ))
+        t.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash('Comment added.', 'success')
+    return redirect(url_for('ticket_detail', ticket_id=ticket_id))
+
+
+@app.route('/ticket/<int:ticket_id>/assign', methods=['POST'])
+@login_required
+def ticket_assign(ticket_id):
+    t = EngTicket.query.get_or_404(ticket_id)
+    if current_user.role not in [UserRole.ADMIN, UserRole.ENGINEERING]:
+        abort(403)
+    assigned_id = request.form.get('assigned_to_id', '')
+    t.assigned_to_id = int(assigned_id) if assigned_id else None
+    t.updated_at = datetime.utcnow()
+    assignee = User.query.get(t.assigned_to_id) if t.assigned_to_id else None
+    db.session.add(EngTicketComment(
+        ticket_id = t.id,
+        user_id   = current_user.id,
+        comment   = f'Ticket assigned to {assignee.full_name}.' if assignee else 'Ticket unassigned.',
+    ))
+    db.session.commit()
+    flash('Assignment updated.', 'success')
+    return redirect(url_for('ticket_detail', ticket_id=ticket_id))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI — DATABASE INIT & SEED
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1397,8 +2172,12 @@ def init_db_cmd():
     """Create tables and seed reference data."""
     _init_db()
     print("✓ Database initialised.")
-    print("  Admin    : admin / Admin123!")
-    print("  Engineers: j.smith, m.wilson … / Engineer1!")
+    print("  Admin          : admin / Admin123!")
+    print("  Engineering    : j.smith, m.wilson / Engineer1!")
+    print("  Customer Support: s.martin / Engineer1!")
+    print("  Workshop Manager: r.johnson / Engineer1!")
+    print("  Supply Chain   : p.dubois / Engineer1!")
+    print("  Quality        : a.leblanc / Engineer1!")
 
 
 @app.cli.command('seed-warranties')
@@ -1407,7 +2186,7 @@ def seed_warranties():
     import random
     admin     = User.query.filter_by(username='admin').first()
     customers = Customer.query.all()
-    engineers = User.query.filter(User.role == 'engineer').all()
+    engineers = User.query.filter(User.role == UserRole.ENGINEERING).all()
     if not (admin and customers and engineers):
         print("Run 'flask init-db' first.")
         return
@@ -1436,9 +2215,8 @@ def seed_warranties():
         'High current consumption fault flag. Repeated thermal protection trip.',
     ]
 
-    statuses   = [WarrantyStatus.OPEN, WarrantyStatus.WORKSHOP,
-                  WarrantyStatus.ENGINEERING, WarrantyStatus.CLOSED,
-                  WarrantyStatus.CLOSED]  # more closed for realism
+    statuses   = [WarrantyStatus.OPEN, WarrantyStatus.IN_PROGRESS,
+                  WarrantyStatus.CLOSED, WarrantyStatus.CLOSED]  # more closed for realism
     decisions  = [ClosureDecision.ACCEPTED, ClosureDecision.PARTIALLY_ACCEPTED,
                   ClosureDecision.REJECTED, ClosureDecision.ACCEPTED]
 
@@ -1500,30 +2278,27 @@ def seed_warranties():
                               timestamp=start_dt)
         db.session.add(a1)
 
-        if status in [WarrantyStatus.WORKSHOP, WarrantyStatus.ENGINEERING, WarrantyStatus.CLOSED]:
+        if status in [WarrantyStatus.IN_PROGRESS, WarrantyStatus.CLOSED]:
             a2 = WarrantyActivity(
                 warranty_id=w.id, user_id=random.choice(engineers).id,
                 activity_type=ActivityType.STATUS_CHANGED,
-                comment='Unit received in workshop. Visual inspection initiated.',
-                old_value='Open', new_value='Under Workshop Investigation',
+                comment='Investigation started. Unit under review.',
+                old_value='Open', new_value='In Progress',
                 timestamp=start_dt + timedelta(days=random.randint(1, 5)))
             db.session.add(a2)
 
-        if status in [WarrantyStatus.ENGINEERING, WarrantyStatus.CLOSED]:
+        if status == WarrantyStatus.CLOSED:
             a3 = WarrantyActivity(
                 warranty_id=w.id, user_id=random.choice(engineers).id,
                 activity_type=ActivityType.COMMENT_ADDED,
-                comment='Workshop test report completed. Root-cause identified. '
-                        'Forwarding to engineering for warranty decision.',
+                comment='Investigation complete. Findings documented.',
                 timestamp=start_dt + timedelta(days=random.randint(6, 20)))
             db.session.add(a3)
-
-        if status == WarrantyStatus.CLOSED:
             a4 = WarrantyActivity(
                 warranty_id=w.id, user_id=admin.id,
                 activity_type=ActivityType.CLOSED,
                 comment=w.closure_comments,
-                old_value='Under Engineering Review', new_value='Closed',
+                old_value='In Progress', new_value='Closed',
                 timestamp=w.closed_at)
             db.session.add(a4)
 

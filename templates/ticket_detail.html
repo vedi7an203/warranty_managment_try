@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}{{ t.ticket_number }} — WAM{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb + Header -->
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+  <div>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb mb-1 small">
+        <li class="breadcrumb-item"><a href="{{ url_for('ticket_list') }}">Tickets</a></li>
+        <li class="breadcrumb-item active">{{ t.ticket_number }}</li>
+      </ol>
+    </nav>
+    <h3 class="mb-0 fw-bold">
+      <span class="font-monospace">{{ t.ticket_number }}</span>
+    </h3>
+    <p class="text-muted mb-0 small">
+      Created {{ t.created_at|fdatetime }} by {{ t.created_by_user.full_name if t.created_by_user else '—' }}
+    </p>
+  </div>
+
+  <div class="text-end d-flex flex-column gap-2">
+    <!-- Status display -->
+    <div>
+      <span class="badge bg-{{ t.status_color }} fs-6 px-3 py-2">
+        {{ t.status_label }}
+      </span>
+    </div>
+    <!-- Type + Priority -->
+    <div class="d-flex gap-2 justify-content-end">
+      <span class="badge small" style="background:{{ TicketType.COLORS.get(t.ticket_type,'#6c757d') }}">
+        <i class="fa-solid {{ t.type_icon }} me-1"></i>{{ t.type_label }}
+      </span>
+      <span class="badge bg-{{ t.priority_color }} small">{{ t.priority_label }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Left column -->
+  <div class="col-12 col-lg-7">
+
+    <!-- Description Card -->
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <span class="small fw-semibold"><i class="fa-solid fa-align-left me-1"></i>Description</span>
+      </div>
+      <div class="card-body">
+        <p class="mb-0" style="white-space:pre-wrap;">{{ t.description }}</p>
+      </div>
+    </div>
+
+    <!-- Resolution Card (if closed) -->
+    {% if t.status == TicketStatus.CLOSED and t.resolution %}
+    <div class="card mb-3 border-success">
+      <div class="card-header py-2 bg-success bg-opacity-10">
+        <span class="small fw-semibold text-success"><i class="fa-solid fa-circle-check me-1"></i>Resolution</span>
+      </div>
+      <div class="card-body">
+        <p class="mb-0" style="white-space:pre-wrap;">{{ t.resolution }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Related Warranty -->
+    {% if t.related_warranty %}
+    <div class="card mb-3 border-primary">
+      <div class="card-header py-2 bg-primary bg-opacity-10">
+        <span class="small fw-semibold text-primary"><i class="fa-solid fa-shield-halved me-1"></i>Related Warranty</span>
+      </div>
+      <div class="card-body py-2">
+        <a href="{{ url_for('warranty_detail', warranty_id=t.related_warranty.id) }}"
+           class="fw-bold font-monospace text-decoration-none">
+          {{ t.related_warranty.warranty_number }}
+        </a>
+        <span class="text-muted small ms-2">
+          {{ t.related_warranty.lru_part_number }} / {{ t.related_warranty.lru_serial_number }}
+        </span>
+        <span class="badge bg-{{ t.related_warranty.status_color }} ms-2 small">
+          {{ t.related_warranty.status_label }}
+        </span>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Comments / Activity Log -->
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <span class="small fw-semibold"><i class="fa-solid fa-comments me-1"></i>Activity</span>
+      </div>
+      <div class="card-body p-0">
+        {% if comments %}
+        <div class="list-group list-group-flush">
+          {% for c in comments %}
+          <div class="list-group-item py-2 px-3">
+            <div class="d-flex align-items-start gap-2">
+              <span class="avatar-xs mt-1 flex-shrink-0">{{ c.user.initials if c.user else '?' }}</span>
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <strong class="small">{{ c.user.full_name if c.user else '—' }}</strong>
+                  <span class="text-muted small">{{ c.timestamp|fdatetime }}</span>
+                  {% if c.is_status_change %}
+                  <span class="badge bg-light text-dark border small">
+                    {% if c.old_status %}
+                    {{ TicketStatus.LABELS.get(c.old_status, c.old_status) }}
+                    <i class="fa-solid fa-arrow-right mx-1"></i>
+                    {% endif %}
+                    {{ TicketStatus.LABELS.get(c.new_status, c.new_status) }}
+                  </span>
+                  {% endif %}
+                </div>
+                <p class="mb-0 small text-muted mt-1" style="white-space:pre-wrap;">{{ c.comment }}</p>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small text-center py-3 mb-0">No activity yet.</p>
+        {% endif %}
+      </div>
+
+      <!-- Add Comment Form -->
+      <div class="card-footer py-2">
+        <form method="post" action="{{ url_for('ticket_add_comment', ticket_id=t.id) }}"
+              class="d-flex gap-2">
+          <input name="comment" class="form-control form-control-sm" placeholder="Add a comment…" required>
+          <button type="submit" class="btn btn-sm btn-primary flex-shrink-0">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right column -->
+  <div class="col-12 col-lg-5">
+
+    <!-- Details Card -->
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <span class="small fw-semibold"><i class="fa-solid fa-circle-info me-1"></i>Details</span>
+      </div>
+      <div class="card-body py-2">
+        <dl class="row g-1 mb-0 small">
+          <dt class="col-5 text-muted">Customer</dt>
+          <dd class="col-7">{{ t.customer.name if t.customer else '—' }}</dd>
+
+          <dt class="col-5 text-muted">Assigned To</dt>
+          <dd class="col-7">
+            {{ t.assigned_to_user.full_name if t.assigned_to_user else '—' }}
+          </dd>
+
+          <dt class="col-5 text-muted">Created</dt>
+          <dd class="col-7">{{ t.created_at|fdate }}</dd>
+
+          <dt class="col-5 text-muted">Updated</dt>
+          <dd class="col-7">{{ t.updated_at|fdate }}</dd>
+
+          {% if t.closed_at %}
+          <dt class="col-5 text-muted">Closed</dt>
+          <dd class="col-7">{{ t.closed_at|fdate }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <!-- Assign (Engineering/Admin only) -->
+    {% if current_user.role in ['admin', 'engineering'] %}
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <span class="small fw-semibold"><i class="fa-solid fa-user-gear me-1"></i>Assignment</span>
+      </div>
+      <div class="card-body py-2">
+        <form method="post" action="{{ url_for('ticket_assign', ticket_id=t.id) }}"
+              class="d-flex gap-2">
+          <select name="assigned_to_id" class="form-select form-select-sm">
+            <option value="">— Unassigned —</option>
+            {% for e in all_engineers %}
+            <option value="{{ e.id }}" {{ 'selected' if t.assigned_to_id == e.id }}>
+              {{ e.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-outline-primary flex-shrink-0">
+            <i class="fa-solid fa-check"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Status Change -->
+    {% if current_user.role in ['admin', 'engineering'] or user_can('can_change_status') %}
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <span class="small fw-semibold"><i class="fa-solid fa-arrows-rotate me-1"></i>Change Status</span>
+      </div>
+      <div class="card-body py-2">
+        <form method="post" action="{{ url_for('ticket_update_status', ticket_id=t.id) }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">New Status</label>
+            <select name="status" class="form-select form-select-sm" required>
+              {% for val, lbl in TicketStatus.CHOICES %}
+              <option value="{{ val }}" {{ 'selected' if t.status == val }}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-2" id="resolutionGroup">
+            <label class="form-label small mb-1">Resolution <span class="text-muted">(for closure)</span></label>
+            <textarea name="resolution" class="form-control form-control-sm" rows="2"
+                      placeholder="Resolution notes…">{{ t.resolution or '' }}</textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Comment <span class="text-muted">(optional)</span></label>
+            <input name="comment" class="form-control form-control-sm"
+                   placeholder="Reason for status change…">
+          </div>
+          <button type="submit" class="btn btn-sm btn-warning w-100">
+            <i class="fa-solid fa-arrows-rotate me-1"></i>Update Status
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick links -->
+    <div class="d-flex flex-column gap-2">
+      {% if user_can('can_create_warranty') and t.ticket_type == 'engineering_support' %}
+      <a href="{{ url_for('warranty_new') }}"
+         class="btn btn-sm btn-outline-primary">
+        <i class="fa-solid fa-shield-halved me-1"></i>Open Warranty Case
+      </a>
+      {% endif %}
+      <a href="{{ url_for('ticket_list') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to Tickets
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

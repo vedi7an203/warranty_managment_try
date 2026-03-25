@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}New Ticket — WAM{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet"/>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-1 small">
+      <li class="breadcrumb-item"><a href="{{ url_for('ticket_list') }}">Tickets</a></li>
+      <li class="breadcrumb-item active">New Ticket</li>
+    </ol>
+  </nav>
+  <h4 class="mb-0">
+    <i class="fa-solid fa-plus-circle me-2 text-primary"></i>New Engineering Ticket
+  </h4>
+  <p class="text-muted small mb-0">Open a warranty case, engineering support request, or other solicitation.</p>
+</div>
+
+<div class="row justify-content-center">
+<div class="col-12 col-xl-9">
+<form method="POST" action="{{ url_for('ticket_new') }}">
+
+  <!-- Type Selection -->
+  <div class="card mb-3">
+    <div class="card-header py-2">
+      <span class="small fw-semibold"><i class="fa-solid fa-list me-1"></i>Ticket Type & Priority</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+
+        <div class="col-12 col-md-8">
+          <label class="form-label small mb-1">Ticket Type <span class="text-danger">*</span></label>
+          <div class="row g-2">
+            {% for val, lbl in allowed_types %}
+            <div class="col-6 col-md-6">
+              <input type="radio" class="btn-check" name="ticket_type" id="tt_{{ val }}"
+                     value="{{ val }}"
+                     {% if preselect_type == val or (loop.first and not preselect_type) %}checked{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start py-2 px-3 d-flex align-items-center gap-2"
+                     for="tt_{{ val }}"
+                     style="border-color:{{ TicketType.COLORS.get(val,'#6c757d') }}">
+                <i class="fa-solid {{ TicketType.ICONS.get(val,'fa-ticket') }}"
+                   style="color:{{ TicketType.COLORS.get(val,'#6c757d') }}"></i>
+                <span class="small">{{ lbl }}</span>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small mb-1">Priority <span class="text-danger">*</span></label>
+          {% for val, lbl in TicketPriority.CHOICES %}
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="priority"
+                   id="prio_{{ val }}" value="{{ val }}"
+                   {% if val == 'medium' %}checked{% endif %}>
+            <label class="form-check-label small d-flex align-items-center gap-2" for="prio_{{ val }}">
+              <span class="badge bg-{{ TicketPriority.BADGE_COLORS.get(val,'secondary') }}">{{ lbl }}</span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Details -->
+  <div class="card mb-3">
+    <div class="card-header py-2">
+      <span class="small fw-semibold"><i class="fa-solid fa-pencil me-1"></i>Ticket Details</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+
+        <div class="col-12">
+          <label class="form-label small mb-1">Title <span class="text-danger">*</span></label>
+          <input name="title" class="form-control form-control-sm" required
+                 placeholder="Brief, descriptive title for this ticket" maxlength="200">
+        </div>
+
+        <div class="col-12">
+          <label class="form-label small mb-1">Description <span class="text-danger">*</span></label>
+          <textarea name="description" class="form-control form-control-sm" rows="5" required
+                    placeholder="Detailed description of the request or issue…"></textarea>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small mb-1">Customer <span class="text-muted">(optional)</span></label>
+          <select name="customer_id" id="customerSelect" class="form-select form-select-sm">
+            <option value="">— None —</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small mb-1">Assign To <span class="text-muted">(optional)</span></label>
+          <select name="assigned_to_id" class="form-select form-select-sm">
+            <option value="">— Unassigned —</option>
+            {% for e in engineers %}
+            <option value="{{ e.id }}">{{ e.full_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {% if preselect_warranty %}
+        <div class="col-12 col-md-6">
+          <label class="form-label small mb-1">Related Warranty</label>
+          <input type="hidden" name="related_warranty_id" value="{{ preselect_warranty }}">
+          <div class="form-control form-control-sm bg-light text-muted">
+            Warranty #{{ preselect_warranty }} (pre-linked)
+          </div>
+        </div>
+        {% else %}
+        <div class="col-12 col-md-6">
+          <label class="form-label small mb-1">Related Warranty # <span class="text-muted">(optional)</span></label>
+          <input name="related_warranty_id" type="number" class="form-control form-control-sm"
+                 placeholder="Internal warranty ID (optional)">
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('ticket_list') }}" class="btn btn-secondary btn-sm">
+      <i class="fa-solid fa-xmark me-1"></i>Cancel
+    </a>
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-paper-plane me-1"></i>Create Ticket
+    </button>
+  </div>
+
+</form>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+var el = document.getElementById('customerSelect');
+if (el) new TomSelect(el, { allowEmptyOption: true });
+</script>
+{% endblock %}

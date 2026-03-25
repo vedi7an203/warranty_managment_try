@@ -8,25 +8,58 @@
   .ts-wrapper.multi .ts-control { min-height: 31px; padding: 2px 6px; }
   .ts-wrapper .ts-control { font-size: .8125rem; }
   .ts-dropdown { font-size: .8125rem; }
-  .eng-avatar-clickable { cursor: pointer; }
-  .eng-avatar-empty { cursor: pointer; opacity: .45; }
+  .engineer-cell { cursor: pointer; }
+  .engineer-edit-btn { opacity: 0; transition: opacity .15s; cursor: pointer; }
+  tr:hover .engineer-edit-btn { opacity: 1; }
   .adj-time-badge { font-size: .75rem; white-space: nowrap; }
   .occ-badge { font-size: .7rem; }
+  .section-header { font-size: .8rem; font-weight: 600; text-transform: uppercase;
+                     letter-spacing: .05em; color: var(--wam-accent); margin-bottom: .5rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- ────────────────────────  KPI CARDS  ──────────────────────── -->
+
+<!-- ────────────────────────  ROLE BANNER  ──────────────────────── -->
+{% set role_info = {
+  'admin':            ('fa-shield-halved',     'danger',   'Administrator — Full access'),
+  'engineering':      ('fa-screwdriver-wrench','primary',  'Engineering'),
+  'customer_support': ('fa-headset',           'success',  'Customer Support'),
+  'workshop_manager': ('fa-warehouse',         'warning',  'Workshop Manager'),
+  'supply_chain':     ('fa-truck',             'info',     'Supply Chain'),
+  'quality':          ('fa-clipboard-check',   'secondary','Quality'),
+} %}
+{% set ri = role_info.get(current_user.role, ('fa-user', 'secondary', current_user.role)) %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">
+    <i class="fa-solid {{ ri[0] }} text-{{ ri[1] }} me-2"></i>{{ ri[2] }}
+    <span class="text-muted fw-normal small ms-1">— {{ current_user.full_name }}</span>
+  </h5>
+  <div class="d-flex gap-2">
+    {% if user_can('can_create_warranty') %}
+    <a href="{{ url_for('warranty_new') }}" class="btn btn-sm btn-success">
+      <i class="fa-solid fa-shield-halved me-1"></i>New Warranty
+    </a>
+    {% endif %}
+    {% if user_can('can_create_ticket') %}
+    <a href="{{ url_for('ticket_new') }}" class="btn btn-sm btn-primary">
+      <i class="fa-solid fa-plus me-1"></i>New Ticket
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ────────────────────────  WARRANTY KPI CARDS  ──────────────────────── -->
+<p class="section-header"><i class="fa-solid fa-shield-halved me-1"></i>Warranty Cases</p>
 <div class="row g-3 mb-4">
   {% set cards = [
-    ('Total',                  stats.total,       'fa-layer-group',   'kpi-total',       url_for('dashboard')),
-    ('Open',                   stats.open,        'fa-folder-open',   'kpi-open',        url_for('dashboard', status='open')),
-    ('Workshop Investigation', stats.workshop,    'fa-wrench',        'kpi-workshop',    url_for('dashboard', status='workshop')),
-    ('Engineering Review',     stats.engineering, 'fa-microscope',    'kpi-engineering', url_for('dashboard', status='engineering')),
-    ('Closed',                 stats.closed,      'fa-lock',          'kpi-closed',      url_for('dashboard', status='closed')),
+    ('Total',       stats.total,       'fa-layer-group', 'kpi-total',       url_for('dashboard')),
+    ('Open',        stats.open,        'fa-folder-open', 'kpi-open',        url_for('dashboard', status='open')),
+    ('In Progress', stats.in_progress, 'fa-circle-half-stroke','kpi-workshop',url_for('dashboard', status='in_progress')),
+    ('Closed',      stats.closed,      'fa-lock',        'kpi-closed',      url_for('dashboard', status='closed')),
   ] %}
   {% for label, count, icon, cls, href in cards %}
-  <div class="col-6 col-md-4 col-xl">
+  <div class="col-6 col-md-3 col-xl">
     <a href="{{ href }}" class="text-decoration-none">
       <div class="card kpi-card {{ cls }} h-100">
         <div class="card-body d-flex align-items-center gap-3">
@@ -42,7 +75,76 @@
   {% endfor %}
 </div>
 
-<!-- ────────────────────────  FILTER BAR  ──────────────────────── -->
+<!-- ────────────────────────  TICKET KPI CARDS  ──────────────────────── -->
+<p class="section-header"><i class="fa-solid fa-ticket me-1"></i>Engineering Tickets</p>
+<div class="row g-3 mb-4">
+  {% set tcards = [
+    ('Total',          ticket_stats.total,       'fa-layer-group',      'kpi-total',       url_for('ticket_list')),
+    ('Open',           ticket_stats.open,        'fa-folder-open',      'kpi-open',        url_for('ticket_list', status='open')),
+    ('In Progress',    ticket_stats.in_progress, 'fa-circle-half-stroke','kpi-workshop',   url_for('ticket_list', status='in_progress')),
+    ('Pending Review', ticket_stats.pending,     'fa-hourglass-half',   'kpi-engineering', url_for('ticket_list', status='pending_review')),
+    ('Closed',         ticket_stats.closed,      'fa-lock',             'kpi-closed',      url_for('ticket_list', status='closed')),
+  ] %}
+  {% for label, count, icon, cls, href in tcards %}
+  <div class="col-6 col-md-2 col-xl">
+    <a href="{{ href }}" class="text-decoration-none">
+      <div class="card kpi-card {{ cls }} h-100" style="opacity:0.85">
+        <div class="card-body d-flex align-items-center gap-3 py-2">
+          <div class="kpi-icon" style="font-size:1.2rem"><i class="fa-solid {{ icon }}"></i></div>
+          <div>
+            <div class="kpi-value" style="font-size:1.4rem">{{ count }}</div>
+            <div class="kpi-label" style="font-size:.7rem">{{ label }}</div>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ────────────────────────  RECENT TICKETS  ──────────────────────── -->
+{% if recent_tickets %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span class="small fw-semibold"><i class="fa-solid fa-clock-rotate-left me-1"></i>Recent Open Tickets</span>
+    <a href="{{ url_for('ticket_list') }}" class="btn btn-xs btn-outline-primary btn-sm">View All</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Ticket #</th><th>Type</th><th>Title</th><th>Priority</th>
+          <th>Status</th><th>Assigned To</th><th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in recent_tickets %}
+        <tr class="cursor-pointer" onclick="window.location='{{ url_for('ticket_detail', ticket_id=t.id) }}'">
+          <td class="font-monospace fw-bold">{{ t.ticket_number }}</td>
+          <td>
+            <span class="badge" style="background:{{ TicketType.COLORS.get(t.ticket_type,'#6c757d') }}">
+              <i class="fa-solid {{ t.type_icon }} me-1"></i>{{ t.type_label }}
+            </span>
+          </td>
+          <td>{{ t.title[:60] }}{{ '…' if t.title|length > 60 }}</td>
+          <td>
+            <span class="badge bg-{{ t.priority_color }}">{{ t.priority_label }}</span>
+          </td>
+          <td>
+            <span class="badge bg-{{ t.status_color }}">{{ t.status_label }}</span>
+          </td>
+          <td>{{ t.assigned_to_user.full_name if t.assigned_to_user else '—' }}</td>
+          <td class="text-muted">{{ t.updated_at|fdate }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ────────────────────────  WARRANTY FILTER BAR  ──────────────────────── -->
+<p class="section-header mt-2"><i class="fa-solid fa-shield-halved me-1"></i>Warranty List</p>
 <div class="card filter-card mb-3">
   <div class="card-body py-2">
     <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm">
@@ -128,12 +230,16 @@
     <strong>{{ warranties|length }}</strong> warrant{{ 'y' if warranties|length == 1 else 'ies' }} found
   </span>
   <div class="d-flex gap-2">
+    {% if user_can('can_export') %}
     <button id="downloadBtn" class="btn btn-outline-success btn-sm" type="button">
       <i class="fa-solid fa-file-excel me-1"></i>Download
     </button>
+    {% endif %}
+    {% if user_can('can_create_warranty') %}
     <a href="{{ url_for('warranty_new') }}" class="btn btn-success btn-sm">
       <i class="fa-solid fa-plus me-1"></i>New Warranty
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -152,9 +258,9 @@
           <th>Customer</th>
           <th>Observed Defect</th>
           <th class="text-end">TSI&nbsp;/&nbsp;TSO</th>
-          <th>Start</th>
+          <th>Adj. Start</th>
           <th>Adj. Time</th>
-          <th>Engineer</th>
+          <th>Engineers</th>
           <th>Updated</th>
         </tr>
       </thead>
@@ -164,10 +270,10 @@
 
           <td>
             <span class="fw-bold font-monospace wnum">{{ w.warranty_number }}</span>
-            {% if w.occurrence_number > 1 %}
+            {% if w.total_occurrence_count > 1 %}
             <span class="badge bg-warning text-dark ms-1 occ-badge"
-                  title="Occurrence #{{ w.occurrence_number }} for P/N {{ w.lru_part_number }} / S/N {{ w.lru_serial_number }}">
-              <i class="fa-solid fa-rotate-left"></i>{{ w.occurrence_number }}
+                  title="This unit has {{ w.total_occurrence_count }} total warranty(ies)">
+              <i class="fa-solid fa-rotate-left"></i>{{ w.total_occurrence_count }}
             </span>
             {% endif %}
           </td>
@@ -225,14 +331,32 @@
           </td>
 
           <td onclick="event.stopPropagation()">
-            <div id="eng-avatars-{{ w.id }}"
-                 onclick="openEngineerModal({{ w.id }}, {{ (w.engineers[0].id if w.engineers else 0) }})">
-              {% if w.engineers %}
-              <span class="avatar-xs eng-avatar-clickable" title="{{ w.engineers[0].full_name }}">{{ w.engineers[0].initials }}</span>
-              {% else %}
-              <span class="avatar-xs eng-avatar-empty" title="Assign engineer">—</span>
+            {% if user_can('can_edit_warranty') %}
+            <div class="d-flex align-items-center gap-1">
+              <div class="d-flex flex-wrap gap-1" id="eng-avatars-{{ w.id }}">
+                {% for eng in w.engineers[:3] %}
+                <span class="avatar-xs" title="{{ eng.full_name }}">{{ eng.initials }}</span>
+                {% endfor %}
+                {% if w.engineers|length > 3 %}
+                <span class="avatar-xs text-muted">+{{ w.engineers|length - 3 }}</span>
+                {% endif %}
+              </div>
+              <button type="button"
+                      class="btn btn-xs btn-outline-secondary engineer-edit-btn ms-1"
+                      title="Edit engineers"
+                      onclick="openEngineerModal({{ w.id }}, {{ w.engineers | map(attribute='id') | list | tojson }})"
+              ><i class="fa-solid fa-pen fa-xs"></i></button>
+            </div>
+            {% else %}
+            <div class="d-flex flex-wrap gap-1">
+              {% for eng in w.engineers[:3] %}
+              <span class="avatar-xs" title="{{ eng.full_name }}">{{ eng.initials }}</span>
+              {% endfor %}
+              {% if w.engineers|length > 3 %}
+              <span class="avatar-xs text-muted">+{{ w.engineers|length - 3 }}</span>
               {% endif %}
             </div>
+            {% endif %}
           </td>
 
           <td class="small text-muted">{{ w.updated_at|fdate }}</td>
@@ -248,33 +372,28 @@
 <div class="empty-state text-center py-5">
   <i class="fa-solid fa-inbox fa-3x text-muted mb-3 d-block"></i>
   <h5 class="text-muted">No warranties found</h5>
-  <p class="text-muted small">Try adjusting your filters or
-    <a href="{{ url_for('warranty_new') }}">create a new warranty</a>.
+  <p class="text-muted small">Try adjusting your filters
+    {% if user_can('can_create_warranty') %}or
+    <a href="{{ url_for('warranty_new') }}">create a new warranty</a>{% endif %}.
   </p>
 </div>
 {% endif %}
 
 <!-- ────────────────────────  ENGINEER MODAL  ──────────────────────── -->
+{% if user_can('can_edit_warranty') %}
 <div class="modal fade" id="engineerModal" tabindex="-1" aria-labelledby="engineerModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
       <div class="modal-header py-2 px-3">
         <h6 class="modal-title mb-0" id="engineerModalLabel">
-          <i class="fa-solid fa-user me-1"></i>Assign Engineer
+          <i class="fa-solid fa-users me-1"></i>Assign Engineers
         </h6>
         <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body px-3 py-2">
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="eng-radio"
-                 value="0" id="eng-none">
-          <label class="form-check-label small text-muted" for="eng-none">
-            — None
-          </label>
-        </div>
+      <div class="modal-body px-3 py-2" id="engineerModalBody">
         {% for e in engineers %}
         <div class="form-check">
-          <input class="form-check-input eng-radio" type="radio" name="eng-radio"
+          <input class="form-check-input eng-checkbox" type="checkbox"
                  value="{{ e.id }}" id="eng-{{ e.id }}">
           <label class="form-check-label small" for="eng-{{ e.id }}">
             <span class="avatar-xs me-1">{{ e.initials }}</span>{{ e.full_name }}
@@ -291,6 +410,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -308,73 +428,72 @@
   });
 });
 
-// ── Download button — build URL from current form state
-document.getElementById('downloadBtn').addEventListener('click', function() {
-  var form   = document.getElementById('filterForm');
-  var params = new URLSearchParams();
-
-  ['search', 'engineer', 'sort'].forEach(function(name) {
-    var el = form.elements[name];
-    if (el && el.value) params.append(name, el.value);
-  });
-
-  ['status', 'customer', 'pn'].forEach(function(name) {
-    var selects = form.querySelectorAll('select[name="' + name + '"]');
-    selects.forEach(function(sel) {
-      Array.from(sel.selectedOptions).forEach(function(opt) {
-        if (opt.value) params.append(name, opt.value);
+// ── Download button
+var dlBtn = document.getElementById('downloadBtn');
+if (dlBtn) {
+  dlBtn.addEventListener('click', function() {
+    var form   = document.getElementById('filterForm');
+    var params = new URLSearchParams();
+    ['search', 'engineer', 'sort'].forEach(function(name) {
+      var el = form.elements[name];
+      if (el && el.value) params.append(name, el.value);
+    });
+    ['status', 'customer', 'pn'].forEach(function(name) {
+      var selects = form.querySelectorAll('select[name="' + name + '"]');
+      selects.forEach(function(sel) {
+        Array.from(sel.selectedOptions).forEach(function(opt) {
+          if (opt.value) params.append(name, opt.value);
+        });
       });
     });
+    window.location = '{{ url_for("dashboard_download") }}?' + params.toString();
   });
+}
 
-  window.location = '{{ url_for("dashboard_download") }}?' + params.toString();
-});
-
-// ── Engineer inline edit modal (single engineer)
+// ── Engineer inline edit modal
 var currentWarrantyId = null;
-var engineerModal = new bootstrap.Modal(document.getElementById('engineerModal'));
+var engModalEl = document.getElementById('engineerModal');
+var engineerModal = engModalEl ? new bootstrap.Modal(engModalEl) : null;
 
-function openEngineerModal(warrantyId, currentEngId) {
+function openEngineerModal(warrantyId, currentEngIds) {
+  if (!engineerModal) return;
   currentWarrantyId = warrantyId;
-  var radios = document.querySelectorAll('input[name="eng-radio"]');
-  radios.forEach(function(r) {
-    r.checked = parseInt(r.value) === parseInt(currentEngId);
+  document.querySelectorAll('.eng-checkbox').forEach(function(cb) {
+    cb.checked = currentEngIds.indexOf(parseInt(cb.value)) !== -1;
   });
-  // If none matched, check "None"
-  if (!Array.from(radios).some(function(r) { return r.checked; })) {
-    document.getElementById('eng-none').checked = true;
-  }
   engineerModal.show();
 }
 
-document.getElementById('engineerSaveBtn').addEventListener('click', function() {
-  var checked = document.querySelector('input[name="eng-radio"]:checked');
-  var engId   = checked ? checked.value : '0';
-
-  var formData = new FormData();
-  if (engId !== '0') formData.append('engineer_ids', engId);
-
-  fetch('/api/warranty/' + currentWarrantyId + '/set-engineers', {
-    method: 'POST',
-    body: formData,
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.success) {
-      var container = document.getElementById('eng-avatars-' + currentWarrantyId);
-      if (container) {
-        var eng = data.engineers[0];
-        if (eng) {
-          container.innerHTML = '<span class="avatar-xs eng-avatar-clickable" title="' + eng.name + '">' + eng.initials + '</span>';
-        } else {
-          container.innerHTML = '<span class="avatar-xs eng-avatar-empty" title="Assign engineer">—</span>';
+var saveBtn = document.getElementById('engineerSaveBtn');
+if (saveBtn) {
+  saveBtn.addEventListener('click', function() {
+    var ids = Array.from(document.querySelectorAll('.eng-checkbox:checked'))
+                   .map(function(cb) { return cb.value; });
+    var formData = new FormData();
+    ids.forEach(function(id) { formData.append('engineer_ids', id); });
+    fetch('/api/warranty/' + currentWarrantyId + '/set-engineers', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        var container = document.getElementById('eng-avatars-' + currentWarrantyId);
+        if (container) {
+          var shown = data.engineers.slice(0, 3);
+          var extra = data.engineers.length - 3;
+          var html  = shown.map(function(e) {
+            return '<span class="avatar-xs" title="' + e.name + '">' + e.initials + '</span>';
+          }).join('');
+          if (extra > 0) html += '<span class="avatar-xs text-muted">+' + extra + '</span>';
+          container.innerHTML = html;
         }
+        engineerModal.hide();
       }
-      engineerModal.hide();
-    }
-  })
-  .catch(function(err) { console.error(err); });
-});
+    })
+    .catch(function(err) { console.error(err); });
+  });
+}
 </script>
 {% endblock %}
