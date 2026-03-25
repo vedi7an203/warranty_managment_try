@@ -11,6 +11,10 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <!-- Custom -->
   <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
+  <style>
+    .badge-purple { background-color: #6f42c1 !important; color: #fff; }
+    .text-purple { color: #6f42c1 !important; }
+  </style>
   {% block head %}{% endblock %}
 </head>
 <body class="wam-body">
@@ -23,7 +27,7 @@
       <span class="brand-icon"><i class="fa-solid fa-jet-fighter-up"></i></span>
       <span class="brand-text">
         <span class="brand-title">WAM</span>
-        <span class="brand-sub">Warranty Adjudication</span>
+        <span class="brand-sub">Engineering Portal</span>
       </span>
     </a>
 
@@ -34,24 +38,56 @@
 
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-4">
+
+        <!-- Dashboard — always visible -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
              href="{{ url_for('dashboard') }}">
             <i class="fa-solid fa-list-check me-1"></i>Dashboard
           </a>
         </li>
+
+        <!-- Tickets — visible to everyone who can create or view tickets -->
+        {% if current_user.is_authenticated %}
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('ticket') %}active{% endif %}"
+             href="{{ url_for('ticket_list') }}">
+            <i class="fa-solid fa-ticket me-1"></i>Tickets
+          </a>
+        </li>
+        {% endif %}
+
+        <!-- New Warranty — only for those with can_create_warranty -->
+        {% if current_user.is_authenticated and user_can('can_create_warranty') %}
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'warranty_new' %}active{% endif %}"
              href="{{ url_for('warranty_new') }}">
-            <i class="fa-solid fa-plus-circle me-1"></i>New Warranty
+            <i class="fa-solid fa-shield-halved me-1"></i>New Warranty
           </a>
         </li>
+        {% endif %}
+
+        <!-- New Ticket shortcut — for users who can create tickets -->
+        {% if current_user.is_authenticated and user_can('can_create_ticket') %}
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'ticket_new' %}active{% endif %}"
+             href="{{ url_for('ticket_new') }}">
+            <i class="fa-solid fa-plus-circle me-1"></i>New Ticket
+          </a>
+        </li>
+        {% endif %}
+
+        <!-- Statistics — only for those with can_view_statistics -->
+        {% if current_user.is_authenticated and user_can('can_view_statistics') %}
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'statistics' %}active{% endif %}"
              href="{{ url_for('statistics') }}">
             <i class="fa-solid fa-chart-bar me-1"></i>Statistics
           </a>
         </li>
+        {% endif %}
+
+        <!-- Admin — admin role only -->
         {% if current_user.is_authenticated and current_user.role == 'admin' %}
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin') %}active{% endif %}"
@@ -60,6 +96,7 @@
           </a>
         </li>
         {% endif %}
+
       </ul>
 
       {% if current_user.is_authenticated %}
@@ -70,7 +107,19 @@
           <span class="d-none d-md-inline">{{ current_user.full_name }}</span>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
-          <li><span class="dropdown-item-text small text-muted">{{ current_user.role|title }}</span></li>
+          <li>
+            <span class="dropdown-item-text small text-muted">
+              {% set role_labels = {
+                'admin': 'Administrator',
+                'engineering': 'Engineering',
+                'customer_support': 'Customer Support',
+                'workshop_manager': 'Workshop Manager',
+                'supply_chain': 'Supply Chain',
+                'quality': 'Quality',
+              } %}
+              {{ role_labels.get(current_user.role, current_user.role|title) }}
+            </span>
+          </li>
           <li><hr class="dropdown-divider"></li>
           <li>
             <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
